@@ -17,6 +17,8 @@ TITLE = 1
 NAME = 2
 SHIFT = 3
 DAY = 4
+SPECIAL = 5
+SPECIAL_TEXT = 6
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
@@ -112,11 +114,46 @@ async def day_selected(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     context.user_data["izin_gunu"] = query.data
 
+    keyboard = [
+    [
+        InlineKeyboardButton("✍️ Var", callback_data="var"),
+        InlineKeyboardButton("✅ Yok", callback_data="yok")
+    ]
+]
+
+await query.edit_message_text(
+    "📝 Özel durumunuz var mı?",
+    reply_markup=InlineKeyboardMarkup(keyboard)
+)
+
+return SPECIAL
+async def special_selected(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    if query.data == "yok":
+        await query.edit_message_text(
+            f"✅ Mesai Talebiniz Alındı\n\n"
+            f"👤 Personel: {context.user_data['unvan']} {context.user_data['isim']}\n"
+            f"🕒 Mesai: {context.user_data['mesai']}\n"
+            f"📅 İzin Günü: {context.user_data['izin_gunu']}"
+        )
+        return ConversationHandler.END
+
     await query.edit_message_text(
-    f"✅ Mesai Talebiniz Alındı\n\n"
-    f"👤 Personel: {context.user_data['unvan']} {context.user_data['isim']}\n"
-    f"🕒 Mesai: {context.user_data['mesai']}\n"
-    f"📅 İzin Günü: {query.data}"
+        "✍️ Lütfen özel durumunuzu yazınız:"
+    )
+
+    return SPECIAL_TEXT
+    async def special_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data["ozel_durum"] = update.message.text
+
+    await update.message.reply_text(
+        f"✅ Mesai Talebiniz Alındı\n\n"
+        f"👤 Personel: {context.user_data['unvan']} {context.user_data['isim']}\n"
+        f"🕒 Mesai: {context.user_data['mesai']}\n"
+        f"📅 İzin Günü: {context.user_data['izin_gunu']}\n"
+        f"📝 Özel Durum: {context.user_data['ozel_durum']}"
     )
 
     return ConversationHandler.END
@@ -137,8 +174,14 @@ def main():
     ],
     DAY: [
         CallbackQueryHandler(day_selected)
-    ]
-},
+    ],
+SPECIAL: [
+    CallbackQueryHandler(special_selected)
+],
+
+SPECIAL_TEXT: [
+    MessageHandler(filters.TEXT & ~filters.COMMAND, special_text)
+]},
         
         fallbacks=[],
     )
