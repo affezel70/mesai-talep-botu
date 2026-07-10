@@ -86,19 +86,19 @@ async def shift_selected(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     day_keyboard = [
         [
-            InlineKeyboardButton("Pazartesi", callback_data="Pazartesi"),
-            InlineKeyboardButton("Salı", callback_data="Salı")
+            InlineKeyboardButton("💼 Pazartesi", callback_data="Pazartesi"),
+            InlineKeyboardButton("🚀 Salı", callback_data="Salı")
         ],
         [
-            InlineKeyboardButton("Çarşamba", callback_data="Çarşamba"),
-            InlineKeyboardButton("Perşembe", callback_data="Perşembe")
+            InlineKeyboardButton("📈 Çarşamba", callback_data="Çarşamba"),
+            InlineKeyboardButton("🎯 Perşembe", callback_data="Perşembe")
         ],
         [
-            InlineKeyboardButton("Cuma", callback_data="Cuma"),
-            InlineKeyboardButton("Cumartesi", callback_data="Cumartesi")
+            InlineKeyboardButton("🏖️ Cuma", callback_data="Cuma"),
+            InlineKeyboardButton("🌴 Cumartesi", callback_data="Cumartesi")
         ],
         [
-            InlineKeyboardButton("Pazar", callback_data="Pazar")
+            InlineKeyboardButton("☀️ Pazar", callback_data="Pazar")
         ]
     ]
 
