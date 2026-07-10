@@ -19,6 +19,7 @@ SHIFT = 3
 DAY = 4
 SPECIAL = 5
 SPECIAL_TEXT = 6
+CONFIRM = 7
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
@@ -129,18 +130,14 @@ async def day_selected(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return SPECIAL
 
 
+
 async def special_selected(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
     if query.data == "yok":
-        await query.edit_message_text(
-            f"✅ Mesai Talebiniz Alındı "
-            f"👤 Personel: {context.user_data['unvan']} {context.user_data['isim']} "
-            f"🕒 Mesai: {context.user_data['mesai']} "
-            f"📅 İzin Günü: {context.user_data['izin_gunu']}"
-        )
-        return ConversationHandler.END
+        context.user_data["ozel_durum"] = "Yok"
+        return await show_confirm(query, context)
 
     await query.edit_message_text("✍️ Lütfen özel durumunuzu yazınız:")
     return SPECIAL_TEXT
@@ -148,17 +145,39 @@ async def special_selected(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def special_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["ozel_durum"] = update.message.text
-
+    keyboard=[[InlineKeyboardButton("✏️ Düzenle",callback_data="edit"),
+               InlineKeyboardButton("✅ Gönder",callback_data="send")]]
     await update.message.reply_text(
-        f"✅ Mesai Talebiniz Alındı "
-        f"👤 Personel: {context.user_data['unvan']} {context.user_data['isim']} "
-        f"🕒 Mesai: {context.user_data['mesai']} "
-        f"📅 İzin Günü: {context.user_data['izin_gunu']} "
-        f"📝 Özel Durum: {context.user_data['ozel_durum']}"
-    )
+        f"📋 TALEP ÖZETİ\n\n"
+        f"👤 {context.user_data['unvan']} {context.user_data['isim']}\n"
+        f"🕒 {context.user_data['mesai']}\n"
+        f"📅 {context.user_data['izin_gunu']}\n"
+        f"📝 {context.user_data['ozel_durum']}",
+        reply_markup=InlineKeyboardMarkup(keyboard))
+    return CONFIRM
 
+async def show_confirm(query, context):
+    keyboard=[[InlineKeyboardButton("✏️ Düzenle",callback_data="edit"),
+               InlineKeyboardButton("✅ Gönder",callback_data="send")]]
+    await query.edit_message_text(
+        f"📋 TALEP ÖZETİ\n\n"
+        f"👤 {context.user_data['unvan']} {context.user_data['isim']}\n"
+        f"🕒 {context.user_data['mesai']}\n"
+        f"📅 {context.user_data['izin_gunu']}\n"
+        f"📝 {context.user_data['ozel_durum']}",
+        reply_markup=InlineKeyboardMarkup(keyboard))
+    return CONFIRM
+
+async def confirm_selected(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query=update.callback_query
+    await query.answer()
+    if query.data=="edit":
+        await query.message.reply_text(
+            "Yeniden başlatmak için /start komutunu kullanın."
+        )
+        return ConversationHandler.END
+    await query.edit_message_text("✅ Mesai talebiniz başarıyla gönderildi.")
     return ConversationHandler.END
-
 
 def main():
 
@@ -185,6 +204,9 @@ SPECIAL: [
 
 SPECIAL_TEXT: [
     MessageHandler(filters.TEXT & ~filters.COMMAND, special_text)
+],
+CONFIRM: [
+    CallbackQueryHandler(confirm_selected)
 ]},
         
         fallbacks=[],
@@ -198,4 +220,3 @@ SPECIAL_TEXT: [
 if __name__ == "__main__":
     asyncio.set_event_loop(asyncio.new_event_loop())
     main()
-    
