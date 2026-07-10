@@ -172,10 +172,26 @@ async def confirm_selected(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query=update.callback_query
     await query.answer()
     if query.data=="edit":
-        await query.message.reply_text(
-            "Yeniden başlatmak için /start komutunu kullanın."
+        keyboard = [
+            [
+                InlineKeyboardButton("🌅 05:00-14:00", callback_data="05:00-14:00"),
+                InlineKeyboardButton("☀️ 08:00-17:00", callback_data="08:00-17:00"),
+            ],
+            [
+                InlineKeyboardButton("🌤️ 11:00-20:00", callback_data="11:00-20:00"),
+                InlineKeyboardButton("🌇 14:00-23:00", callback_data="14:00-23:00"),
+            ],
+            [
+                InlineKeyboardButton("🌙 17:00-02:00", callback_data="17:00-02:00"),
+                InlineKeyboardButton("🌃 20:00-05:00", callback_data="20:00-05:00"),
+            ]
+        ]
+
+        await query.edit_message_text(
+            "🕒 Lütfen talep ettiğiniz çalışma saatini seçiniz.",
+            reply_markup=InlineKeyboardMarkup(keyboard),
         )
-        return ConversationHandler.END
+        return SHIFT
     await query.edit_message_text("✅ Mesai talebiniz başarıyla gönderildi.")
     return ConversationHandler.END
 
