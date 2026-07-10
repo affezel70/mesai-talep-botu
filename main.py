@@ -1,5 +1,8 @@
 import asyncio
-
+import os
+import json
+import gspread
+from google.oauth2.service_account import Credentials
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     Application,
@@ -10,7 +13,18 @@ from telegram.ext import (
     ContextTypes,
     filters,
 )
+SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 
+creds_dict = json.loads(os.environ["GOOGLE_CREDENTIALS"])
+
+creds = Credentials.from_service_account_info(
+    creds_dict,
+    scopes=SCOPES
+)
+
+gc = gspread.authorize(creds)
+
+sheet = gc.open_by_key("16HFBmw1QTyddoYaM191SEtRsWzy5C0-C8aJpwd123456").sheet1
 TOKEN = "8859190739:AAHPizPBwxa8T-_bxEwFSuPSt4zaVafNIQE"
 
 NAME = 1
