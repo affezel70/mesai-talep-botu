@@ -13,19 +13,44 @@ from telegram.ext import (
 
 TOKEN = "8859190739:AAHxAZ8F0hPdQ3EDodRXsJ3Q09thgL8CeyY"
 
-NAME = 1
-SHIFT = 2
-DAY = 3
+TITLE = 1
+NAME = 2
+SHIFT = 3
+DAY = 4
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "📋 Mesai Talep Formuna Hoş Geldiniz.\n\n"
-        "👤 Lütfen çalışan adınızı ve görevinizi yazınız.\n\n"
-        "📝 Örnek:\n"
-        "Rmt.Ayşe - Remote"
-    )
-    return NAME
+    keyboard = [
+        [
+            InlineKeyboardButton("⭐ Operatör", callback_data="Operatör"),
+            InlineKeyboardButton("⭐⭐ Kıdemli Operatör", callback_data="Kıdemli Operatör"),
+        ],
+        [
+            InlineKeyboardButton("⭐⭐⭐ Danışman", callback_data="Danışman"),
+            InlineKeyboardButton("⭐⭐⭐⭐ Kıdemli Danışman", callback_data="Kıdemli Danışman"),
+        ],
+        [
+            InlineKeyboardButton("RMT", callback_data="RMT"),
+        ],
+    ]
 
+    await update.message.reply_text(
+        "👔 Lütfen ünvanınızı seçiniz:",
+        reply_markup=InlineKeyboardMarkup(keyboard),
+    )
+
+    return TITLE
+
+async def title_selected(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    context.user_data["unvan"] = query.data
+
+    await query.message.reply_text(
+        "👤 Lütfen adınızı ve soyadınızı yazınız:"
+    )
+
+    return NAME
 async def get_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["isim"] = update.message.text
 
@@ -103,6 +128,9 @@ def main():
     conv = ConversationHandler(
         entry_points=[CommandHandler("start", start)],
         states={
+    TITLE: [
+        CallbackQueryHandler(title_selected)
+    ],
     NAME: [
         MessageHandler(filters.TEXT & ~filters.COMMAND, get_name)
     ],
@@ -113,6 +141,7 @@ def main():
         CallbackQueryHandler(day_selected)
     ]
 },
+        
         fallbacks=[],
     )
 
