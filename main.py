@@ -29,17 +29,23 @@ async def get_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["isim"] = update.message.text
 
     keyboard = [
-        [InlineKeyboardButton("05:00 - 14:00", callback_data="05:00-14:00")],
-        [InlineKeyboardButton("08:00 - 17:00", callback_data="08:00-17:00")],
-        [InlineKeyboardButton("11:00 - 20:00", callback_data="11:00-20:00")],
-        [InlineKeyboardButton("14:00 - 23:00", callback_data="14:00-23:00")],
-        [InlineKeyboardButton("17:00 - 02:00", callback_data="17:00-02:00")],
-        [InlineKeyboardButton("20:00 - 05:00", callback_data="20:00-05:00")]
+    [
+        InlineKeyboardButton("🌅 05:00-14:00", callback_data="05:00-14:00"),
+        InlineKeyboardButton("☀️ 08:00-17:00", callback_data="08:00-17:00")
+    ],
+    [
+        InlineKeyboardButton("🌤️ 11:00-20:00", callback_data="11:00-20:00"),
+        InlineKeyboardButton("🌇 14:00-23:00", callback_data="14:00-23:00")
+    ],
+    [
+        InlineKeyboardButton("🌙 17:00-02:00", callback_data="17:00-02:00"),
+        InlineKeyboardButton("🌃 20:00-05:00", callback_data="20:00-05:00")
+    ]
     ]
 
     await update.message.reply_text(
-        "🕒 Lütfen istediğiniz mesaiyi seçin:",
-        reply_markup=InlineKeyboardMarkup(keyboard)
+    "🕒 Lütfen talep ettiğiniz çalışma saatini seçiniz.",
+    reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
     return SHIFT
