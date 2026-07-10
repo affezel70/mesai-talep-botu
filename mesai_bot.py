@@ -1,3 +1,5 @@
+import asyncio
+
 from telegram import Update
 from telegram.ext import (
     Application,
@@ -22,7 +24,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return NAME
 
 async def get_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("✅ Bilgileriniz kaydedildi.")
+    context.user_data["calisan"] = update.message.text
+
+    await update.message.reply_text(
+        "✅ Bilgileriniz kaydedildi."
+    )
+
     return ConversationHandler.END
 
 def main():
@@ -41,7 +48,8 @@ def main():
     app.add_handler(conv)
 
     print("Bot çalışıyor...")
-    app.run_polling()
+    app.run_polling(drop_pending_updates=True)
 
 if __name__ == "__main__":
+    asyncio.set_event_loop(asyncio.new_event_loop())
     main()
