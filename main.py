@@ -198,15 +198,35 @@ async def show_confirm(query, context):
     return CONFIRM
 
 async def confirm_selected(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query=update.callback_query
+    query = update.callback_query
     await query.answer()
-    if query.data=="edit":
+
+    if query.data == "edit":
         await query.message.reply_text(
             "Yeniden başlatmak için /start komutunu kullanın."
         )
         return ConversationHandler.END
-    await query.edit_message_text("✅ Mesai talebiniz başarıyla gönderildi.")
+
+    try:
+        sheet.append_row([
+            context.user_data["isim"],
+            context.user_data["unvan"],
+            context.user_data["mesai"],
+            context.user_data["izin_gunu"],
+            context.user_data["ozel_durum"]
+        ])
+
+        await query.edit_message_text(
+            "✅ Mesai talebiniz başarıyla gönderildi.\n\n📄 Talebiniz Google Sheets'e kaydedildi."
+        )
+
+    except Exception as e:
+        await query.edit_message_text(
+            f"❌ Kayıt sırasında hata oluştu.\n\n{e}"
+        )
+
     return ConversationHandler.END
+    
 
 def main():
 
