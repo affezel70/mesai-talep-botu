@@ -81,10 +81,7 @@ async def shift_selected(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     context.user_data["mesai"] = query.data
 
-    await query.edit_message_text(
-        f"✅ Mesai seçildi: {query.data}\n\n"
-        f"👤 Çalışan: {context.user_data['isim']}"
-    )
+    
     day_keyboard = [
         [
             InlineKeyboardButton("Pazartesi", callback_data="Pazartesi"),
@@ -116,9 +113,10 @@ async def day_selected(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["izin_gunu"] = query.data
 
     await query.edit_message_text(
-        f"✅ Mesai: {context.user_data['mesai']}\n"
-        f"📅 İzin Günü: {query.data}\n"
-        f"👤 Çalışan: {context.user_data['isim']}"
+    f"✅ Mesai Talebiniz Alındı\n\n"
+    f"👤 Personel: {context.user_data['unvan']} {context.user_data['isim']}\n"
+    f"🕒 Mesai: {context.user_data['mesai']}\n"
+    f"📅 İzin Günü: {query.data}"
     )
 
     return ConversationHandler.END
