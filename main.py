@@ -146,9 +146,9 @@ async def special_selected(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     return SPECIAL_TEXT
     async def special_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data["ozel_durum"] = update.message.text
+     context.user_data["ozel_durum"] = update.message.text
 
-    await update.message.reply_text(
+await update.message.reply_text(
         f"✅ Mesai Talebiniz Alındı\n\n"
         f"👤 Personel: {context.user_data['unvan']} {context.user_data['isim']}\n"
         f"🕒 Mesai: {context.user_data['mesai']}\n"
