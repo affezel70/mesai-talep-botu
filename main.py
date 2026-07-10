@@ -11,7 +11,7 @@ from telegram.ext import (
     filters,
 )
 
-TOKEN = "8859190739:AAHxAZ8F0hPdQ3EDodRXsJ3Q09thgL8CeyY"
+TOKEN = "8859190739:AAHPizPBwxa8T-_bxEwFSuPSt4zaVafNIQE"
 
 NAME = 1
 TITLE = 2
