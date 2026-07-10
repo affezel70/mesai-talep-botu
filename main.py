@@ -108,56 +108,60 @@ async def shift_selected(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
     return DAY
+
+
 async def day_selected(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
     context.user_data["izin_gunu"] = query.data
 
-    keyboard = [
-    [
+    keyboard = [[
         InlineKeyboardButton("✍️ Var", callback_data="var"),
         InlineKeyboardButton("✅ Yok", callback_data="yok")
-    ]
-]
+    ]]
 
-await query.edit_message_text(
-    "📝 Özel durumunuz var mı?",
-    reply_markup=InlineKeyboardMarkup(keyboard)
-)
+    await query.edit_message_text(
+        "📝 Özel durumunuz var mı?",
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
 
-return SPECIAL
+    return SPECIAL
+
+
 async def special_selected(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
     if query.data == "yok":
         await query.edit_message_text(
-            f"✅ Mesai Talebiniz Alındı\n\n"
-            f"👤 Personel: {context.user_data['unvan']} {context.user_data['isim']}\n"
-            f"🕒 Mesai: {context.user_data['mesai']}\n"
+            f"✅ Mesai Talebiniz Alındı "
+            f"👤 Personel: {context.user_data['unvan']} {context.user_data['isim']} "
+            f"🕒 Mesai: {context.user_data['mesai']} "
             f"📅 İzin Günü: {context.user_data['izin_gunu']}"
         )
         return ConversationHandler.END
 
-    await query.edit_message_text(
-        "✍️ Lütfen özel durumunuzu yazınız:"
-    )
-
+    await query.edit_message_text("✍️ Lütfen özel durumunuzu yazınız:")
     return SPECIAL_TEXT
-    async def special_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
-     context.user_data["ozel_durum"] = update.message.text
 
-await update.message.reply_text(
-        f"✅ Mesai Talebiniz Alındı\n\n"
-        f"👤 Personel: {context.user_data['unvan']} {context.user_data['isim']}\n"
-        f"🕒 Mesai: {context.user_data['mesai']}\n"
-        f"📅 İzin Günü: {context.user_data['izin_gunu']}\n"
+
+async def special_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data["ozel_durum"] = update.message.text
+
+    await update.message.reply_text(
+        f"✅ Mesai Talebiniz Alındı "
+        f"👤 Personel: {context.user_data['unvan']} {context.user_data['isim']} "
+        f"🕒 Mesai: {context.user_data['mesai']} "
+        f"📅 İzin Günü: {context.user_data['izin_gunu']} "
         f"📝 Özel Durum: {context.user_data['ozel_durum']}"
     )
 
-return ConversationHandler.END
+    return ConversationHandler.END
+
+
 def main():
+
     app = Application.builder().token(TOKEN).build()
 
     conv = ConversationHandler(
