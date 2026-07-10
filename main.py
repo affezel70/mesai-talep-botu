@@ -84,7 +84,7 @@ async def shift_selected(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
     return DAY
- async def day_selected(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def day_selected(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
