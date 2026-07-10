@@ -47,7 +47,7 @@ async def title_selected(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["unvan"] = query.data
 
     await query.message.reply_text(
-        "👤 Lütfen adınızı ve soyadınızı yazınız:"
+    "👤 Lütfen sistem adınızı yazınız:"
     )
 
     return NAME
