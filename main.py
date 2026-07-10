@@ -156,7 +156,7 @@ await update.message.reply_text(
         f"📝 Özel Durum: {context.user_data['ozel_durum']}"
     )
 
-    return ConversationHandler.END
+return ConversationHandler.END
 def main():
     app = Application.builder().token(TOKEN).build()
 
