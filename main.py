@@ -15,6 +15,7 @@ TOKEN = "8859190739:AAHxAZ8F0hPdQ3EDodRXsJ3Q09thgL8CeyY"
 
 NAME = 1
 SHIFT = 2
+DAY = 3
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
@@ -60,6 +61,42 @@ async def shift_selected(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"👤 Çalışan: {context.user_data['isim']}"
     )
 
+        day_keyboard = [
+        [
+            InlineKeyboardButton("Pazartesi", callback_data="Pazartesi"),
+            InlineKeyboardButton("Salı", callback_data="Salı")
+        ],
+        [
+            InlineKeyboardButton("Çarşamba", callback_data="Çarşamba"),
+            InlineKeyboardButton("Perşembe", callback_data="Perşembe")
+        ],
+        [
+            InlineKeyboardButton("Cuma", callback_data="Cuma"),
+            InlineKeyboardButton("Cumartesi", callback_data="Cumartesi")
+        ],
+        [
+            InlineKeyboardButton("Pazar", callback_data="Pazar")
+        ]
+    ]
+
+    await query.message.reply_text(
+        "📅 Haftalık izin gününüzü seçiniz:",
+        reply_markup=InlineKeyboardMarkup(day_keyboard)
+    )
+
+    return DAY
+ async def day_selected(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    context.user_data["izin_gunu"] = query.data
+
+    await query.edit_message_text(
+        f"✅ Mesai: {context.user_data['mesai']}\n"
+        f"📅 İzin Günü: {query.data}\n"
+        f"👤 Çalışan: {context.user_data['isim']}"
+    )
+
     return ConversationHandler.END
 def main():
     app = Application.builder().token(TOKEN).build()
@@ -72,6 +109,9 @@ def main():
     ],
     SHIFT: [
         CallbackQueryHandler(shift_selected)
+    ],
+    DAY: [
+        CallbackQueryHandler(day_selected)
     ]
 },
         fallbacks=[],
