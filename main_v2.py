@@ -19,6 +19,7 @@ SHIFT = 3
 DAY = 4
 SPECIAL = 5
 SPECIAL_TEXT = 6
+CONFIRM = 7
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
@@ -171,8 +172,10 @@ async def confirm_selected(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query=update.callback_query
     await query.answer()
     if query.data=="edit":
-        await start(update, context)
-        return TITLE
+        await query.message.reply_text(
+            "Yeniden başlatmak için /start komutunu kullanın."
+        )
+        return ConversationHandler.END
     await query.edit_message_text("✅ Mesai talebiniz başarıyla gönderildi.")
     return ConversationHandler.END
 
