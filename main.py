@@ -60,8 +60,7 @@ async def shift_selected(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"✅ Mesai seçildi: {query.data}\n\n"
         f"👤 Çalışan: {context.user_data['isim']}"
     )
-
-        day_keyboard = [
+    day_keyboard = [
         [
             InlineKeyboardButton("Pazartesi", callback_data="Pazartesi"),
             InlineKeyboardButton("Salı", callback_data="Salı")
