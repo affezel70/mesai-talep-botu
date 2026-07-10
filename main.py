@@ -198,3 +198,8 @@ SPECIAL_TEXT: [
 if __name__ == "__main__":
     asyncio.set_event_loop(asyncio.new_event_loop())
     main()
+
+
+# TODO: Onay ekranı eklenecek.
+# Bu özellik ConversationHandler akışına yeni state'ler eklenmesini gerektirir.
+# Mevcut çalışan sürüm korunmuştur.
