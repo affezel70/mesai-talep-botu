@@ -3,34 +3,45 @@ from telegram.ext import (
     Application,
     CommandHandler,
     MessageHandler,
+    ConversationHandler,
     ContextTypes,
     filters,
 )
 
 TOKEN = "8859190739:AAHxAZ8F0hPdQ3EDodRXsJ3Q09thgL8CeyY"
 
+NAME = 1
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "📋 Mesai Talep Formuna Hoş Geldiniz.\n\n"
-        "👤 Lütfen çalışan adınızı ve görevinizi aşağıdaki formatta yazınız.\n\n"
+        "👤 Lütfen çalışan adınızı ve görevinizi yazınız.\n\n"
         "📝 Örnek:\n"
         "Rmt.Ayşe - Remote"
     )
+    return NAME
 
+async def get_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("✅ Bilgileriniz kaydedildi.")
+    return ConversationHandler.END
 
-async def mesaj(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        f"✅ Bilgileriniz kaydedildi.\n\n"
-        f"Kaydedilen bilgi:\n{update.message.text}"
+def main():
+    app = Application.builder().token(TOKEN).build()
+
+    conv = ConversationHandler(
+        entry_points=[CommandHandler("start", start)],
+        states={
+            NAME: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, get_name)
+            ]
+        },
+        fallbacks=[],
     )
 
+    app.add_handler(conv)
 
-app = Application.builder().token(TOKEN).build()
+    print("Bot çalışıyor...")
+    app.run_polling()
 
-app.add_handler(CommandHandler("start", start))
-app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, mesaj))
-
-print("Bot çalışıyor...")
-
-app.run_polling()
+if __name__ == "__main__":
+    main()
