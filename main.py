@@ -13,8 +13,8 @@ from telegram.ext import (
 
 TOKEN = "8859190739:AAHxAZ8F0hPdQ3EDodRXsJ3Q09thgL8CeyY"
 
-TITLE = 1
-NAME = 2
+NAME = 1
+TITLE = 2
 SHIFT = 3
 DAY = 4
 SPECIAL = 5
@@ -22,26 +22,11 @@ SPECIAL_TEXT = 6
 CONFIRM = 7
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    keyboard = [
-        [
-            InlineKeyboardButton("⭐ Operatör", callback_data="Operatör"),
-            InlineKeyboardButton("⭐⭐ Kıdemli Operatör", callback_data="Kıdemli Operatör"),
-        ],
-        [
-            InlineKeyboardButton("⭐⭐⭐ Danışman", callback_data="Danışman"),
-            InlineKeyboardButton("⭐⭐⭐⭐ Kıdemli Danışman", callback_data="Kıdemli Danışman"),
-        ],
-        [
-            InlineKeyboardButton("RMT", callback_data="RMT"),
-        ],
-    ]
-
     await update.message.reply_text(
-        "👔 Lütfen ünvanınızı seçiniz:",
-        reply_markup=InlineKeyboardMarkup(keyboard),
+        "👤 Lütfen sistem adınızı yazınız:"
     )
 
-    return TITLE
+    return NAME
 
 async def title_selected(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -49,11 +34,27 @@ async def title_selected(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     context.user_data["unvan"] = query.data
 
+    keyboard = [
+    [
+        InlineKeyboardButton("🌅 05:00-14:00", callback_data="05:00-14:00"),
+        InlineKeyboardButton("☀️ 08:00-17:00", callback_data="08:00-17:00")
+    ],
+    [
+        InlineKeyboardButton("🌤️ 11:00-20:00", callback_data="11:00-20:00"),
+        InlineKeyboardButton("🌇 14:00-23:00", callback_data="14:00-23:00")
+    ],
+    [
+        InlineKeyboardButton("🌙 17:00-02:00", callback_data="17:00-02:00"),
+        InlineKeyboardButton("🌃 20:00-05:00", callback_data="20:00-05:00")
+    ]
+    ]
+
     await query.message.reply_text(
-    "👤 Lütfen sistem adınızı yazınız:"
+        "🕒 Lütfen talep ettiğiniz çalışma saatini seçiniz.",
+        reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
-    return NAME
+    return SHIFT
 async def get_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["isim"] = update.message.text
 
@@ -72,12 +73,26 @@ async def get_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     ]
 
+    title_keyboard = [
+        [
+            InlineKeyboardButton("⭐ Operatör", callback_data="Operatör"),
+            InlineKeyboardButton("⭐⭐ Kıdemli Operatör", callback_data="Kıdemli Operatör"),
+        ],
+        [
+            InlineKeyboardButton("⭐⭐⭐ Danışman", callback_data="Danışman"),
+            InlineKeyboardButton("⭐⭐⭐⭐ Kıdemli Danışman", callback_data="Kıdemli Danışman"),
+        ],
+        [
+            InlineKeyboardButton("RMT", callback_data="RMT"),
+        ],
+    ]
+
     await update.message.reply_text(
-    "🕒 Lütfen talep ettiğiniz çalışma saatini seçiniz.",
-    reply_markup=InlineKeyboardMarkup(keyboard)
+        f"Hoş geldiniz {context.user_data['isim']} 👋\n\n👔 Lütfen ünvanınızı seçiniz:",
+        reply_markup=InlineKeyboardMarkup(title_keyboard)
     )
 
-    return SHIFT
+    return TITLE
 async def shift_selected(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -172,26 +187,10 @@ async def confirm_selected(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query=update.callback_query
     await query.answer()
     if query.data=="edit":
-        keyboard = [
-            [
-                InlineKeyboardButton("🌅 05:00-14:00", callback_data="05:00-14:00"),
-                InlineKeyboardButton("☀️ 08:00-17:00", callback_data="08:00-17:00"),
-            ],
-            [
-                InlineKeyboardButton("🌤️ 11:00-20:00", callback_data="11:00-20:00"),
-                InlineKeyboardButton("🌇 14:00-23:00", callback_data="14:00-23:00"),
-            ],
-            [
-                InlineKeyboardButton("🌙 17:00-02:00", callback_data="17:00-02:00"),
-                InlineKeyboardButton("🌃 20:00-05:00", callback_data="20:00-05:00"),
-            ]
-        ]
-
-        await query.edit_message_text(
-            "🕒 Lütfen talep ettiğiniz çalışma saatini seçiniz.",
-            reply_markup=InlineKeyboardMarkup(keyboard),
+        await query.message.reply_text(
+            "Yeniden başlatmak için /start komutunu kullanın."
         )
-        return SHIFT
+        return ConversationHandler.END
     await query.edit_message_text("✅ Mesai talebiniz başarıyla gönderildi.")
     return ConversationHandler.END
 
