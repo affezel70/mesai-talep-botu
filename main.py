@@ -1,7 +1,7 @@
 import asyncio
 import os
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 import gspread
 from google.oauth2.service_account import Credentials
@@ -40,11 +40,75 @@ except gspread.WorksheetNotFound:
     blocked_sheet = spreadsheet.add_worksheet(title="ENGELLENENLER", rows=100, cols=1)
     blocked_sheet.update_acell("A1", "Sistem Adı")
 
-TALEP_BITIS = datetime(2026, 8, 1, 0, 0, 0, tzinfo=ZoneInfo("Europe/Istanbul"))
+AYLAR_TR = {
+    1: "Ocak", 2: "Şubat", 3: "Mart", 4: "Nisan",
+    5: "Mayıs", 6: "Haziran", 7: "Temmuz", 8: "Ağustos",
+    9: "Eylül", 10: "Ekim", 11: "Kasım", 12: "Aralık"
+}
+
+
+def aktif_talep_ayi():
+    """ İçinde bulunduğumuz tarihe göre sıradaki mesai dönemini belirler. Örnek: Temmuz sonunda toplanan talepler Ağustos ayı sekmesine gider. Bir dönemin kapanışından sonra otomatik olarak sonraki ayın dönemine geçilir. """
+    simdi = datetime.now(ZoneInfo("Europe/Istanbul"))
+
+    # Önce içinde bulunduğumuz ayı aday dönem olarak kontrol et.
+    aday_yil = simdi.year
+    aday_ay = simdi.month
+
+    bitis = talep_bitis_zamani(aday_yil, aday_ay)
+    if simdi >= bitis:
+        if aday_ay == 12:
+            aday_ay = 1
+            aday_yil += 1
+        else:
+            aday_ay += 1
+
+    return aday_yil, aday_ay
+
+
+def talep_bitis_zamani(yil, ay):
+    """ İlgili ayın ilk pazartesisinden önceki cuma gününü son talep günü yapar. Cuma günü boyunca talep alınır; teknik kapanış cumartesi 00:00'dır. """
+    ilk_gun = datetime(yil, ay, 1, tzinfo=ZoneInfo("Europe/Istanbul"))
+    ilk_pazartesi = ilk_gun + timedelta(days=(7 - ilk_gun.weekday()) % 7)
+    son_cuma = ilk_pazartesi - timedelta(days=3)
+    return (son_cuma + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+
+
+def aktif_bitis_zamani():
+    yil, ay = aktif_talep_ayi()
+    return talep_bitis_zamani(yil, ay)
+
+
+def son_talep_gunu():
+    return aktif_bitis_zamani() - timedelta(days=1)
+
+
+def aktif_donem_adi():
+    yil, ay = aktif_talep_ayi()
+    return f"{AYLAR_TR[ay]} {yil} Mesai Talepleri"
+
+
+def aktif_talep_sheet():
+    """ Aktif ayın çalışma sayfasını bulur; yoksa otomatik oluşturur. """
+    baslik = aktif_donem_adi()
+    try:
+        ws = spreadsheet.worksheet(baslik)
+    except gspread.WorksheetNotFound:
+        ws = spreadsheet.add_worksheet(title=baslik, rows=1000, cols=10)
+        ws.update(
+            "A1:E1",
+            [["Personel", "Ünvan", "Mesai", "İzin Günü", "Özel Durum"]]
+        )
+    return ws
+
+
+def tarih_metni(dt):
+    return f"{dt.day} {AYLAR_TR[dt.month]} {dt.year}"
+
 
 def kalan_sure_metni():
     simdi = datetime.now(ZoneInfo("Europe/Istanbul"))
-    kalan = TALEP_BITIS - simdi
+    kalan = aktif_bitis_zamani() - simdi
 
     if kalan.total_seconds() <= 0:
         return "⏳ Süre doldu."
@@ -60,7 +124,7 @@ def kalan_sure_metni():
 
 
 def sure_doldu_mu():
-    return datetime.now(ZoneInfo("Europe/Istanbul")) >= TALEP_BITIS
+    return datetime.now(ZoneInfo("Europe/Istanbul")) >= aktif_bitis_zamani()
 
 
 def talep_durumu_acik_mi():
@@ -81,14 +145,15 @@ async def talep_ac(update: Update, context: ContextTypes.DEFAULT_TYPE):
         talep_durumunu_ayarla("kapalı")
         await update.message.reply_text(
             "🔒 Belirlenen talep süresi sona ermiştir.\n\n"
-            "Son tarih: 31 Temmuz 2026 23:59"
+            f"Son talep günü: {tarih_metni(son_talep_gunu())}"
         )
         return
 
     talep_durumunu_ayarla("açık")
     await update.message.reply_text(
         "✅ MESAİ TALEP ALIMI AÇILMIŞTIR\n\n"
-        "📅 Son gün: 31 Temmuz 2026\n"
+        f"📁 Dönem: {aktif_donem_adi()}\n"
+        f"📅 Son talep günü: {tarih_metni(son_talep_gunu())}\n"
         f"{kalan_sure_metni()}\n\n"
         "Personeller artık /start komutu ile mesai talebi oluşturabilir."
     )
@@ -114,7 +179,7 @@ def normalize_name(value):
 def mevcut_talep_satiri(isim):
     try:
         hedef = normalize_name(isim)
-        for row_number, row in enumerate(sheet.get_all_values(), start=1):
+        for row_number, row in enumerate(aktif_talep_sheet().get_all_values(), start=1):
             if row and normalize_name(row[0]) == hedef:
                 return row_number, row
     except Exception:
@@ -195,9 +260,15 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "🕒 MESAİ TALEP SİSTEMİ\n\n"
         "🟢 Talep alımı devam ediyor.\n"
-        "📅 Son gün: 31 Temmuz 2026\n"
+        f"📁 Dönem: {aktif_donem_adi()}\n"
+        f"📅 Son talep günü: {tarih_metni(son_talep_gunu())}\n"
         f"{kalan_sure_metni()}\n\n"
-        "👤 Devam etmek için lütfen sistem adınızı yazınız:"
+        "👤 Devam etmek için lütfen sistem adınızı yazınız:",
+        reply_markup=ReplyKeyboardMarkup(
+            [["⏳ KALAN SÜRE"]],
+            resize_keyboard=True,
+            one_time_keyboard=False
+        )
     )
 
     return NAME
@@ -366,14 +437,14 @@ async def confirm_selected(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ]]
         if context.user_data.get("guncelleme_modu") and context.user_data.get("mevcut_satir"):
             row_number = context.user_data["mevcut_satir"]
-            sheet.update(f"A{row_number}:E{row_number}", yeni_veri)
+            aktif_talep_sheet().update(f"A{row_number}:E{row_number}", yeni_veri)
             basari_mesaji = (
                 "✅ MESAİ TALEBİNİZ BAŞARIYLA GÜNCELLENDİ\n\n"
                 "📄 Mevcut talebiniz yeni bilgilerinizle güncellendi.\n"
                 "⏳ Talep süresi sona erene kadar tekrar güncelleyebilirsiniz."
             )
         else:
-            sheet.append_row(yeni_veri[0])
+            aktif_talep_sheet().append_row(yeni_veri[0])
             basari_mesaji = (
                 "✅ MESAİ TALEBİNİZ BAŞARIYLA GÖNDERİLDİ\n\n"
                 "📄 Talebiniz sisteme kaydedildi.\n"
@@ -396,15 +467,20 @@ async def kalan_sure(update: Update, context: ContextTypes.DEFAULT_TYPE):
         talep_durumunu_ayarla("kapalı")
         await update.message.reply_text(
             "🔒 MESAİ TALEP ALIMI SONA ERMİŞTİR\n\n"
-            "📅 Son gün: 31 Temmuz 2026"
+            f"📅 Son talep günü: {tarih_metni(son_talep_gunu())}"
         )
         return
 
     durum = "🟢 Talep alımı devam ediyor." if talep_durumu_acik_mi() else "🔒 Talep alımı şu anda kapalı."
     await update.message.reply_text(
         f"{durum}\n\n"
-        "📅 Son gün: 31 Temmuz 2026\n"
-        f"{kalan_sure_metni()}"
+        f"📅 Son talep günü: {tarih_metni(son_talep_gunu())}\n"
+        f"{kalan_sure_metni()}",
+        reply_markup=ReplyKeyboardMarkup(
+            [["⏳ KALAN SÜRE"]],
+            resize_keyboard=True,
+            one_time_keyboard=False
+        )
     )
 
 
