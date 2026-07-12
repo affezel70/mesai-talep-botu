@@ -25,6 +25,30 @@ creds = Credentials.from_service_account_info(
 gc = gspread.authorize(creds)
 
 sheet = gc.open_by_key("16HFBmwlQTyddoYaM19lSEtRsWzy5C0-C8aJpwdlcUvQ").sheet1
+spreadsheet = gc.open_by_key("16HFBmwlQTyddoYaM19lSEtRsWzy5C0-C8aJpwdlcUvQ")
+try:
+    settings_sheet = spreadsheet.worksheet("AYARLAR")
+except gspread.WorksheetNotFound:
+    settings_sheet = spreadsheet.add_worksheet(title="AYARLAR", rows=10, cols=2)
+    settings_sheet.update("A1:B2", [["Ayar", "Değer"], ["talep_durumu", "kapalı"]])
+
+def talep_durumu_acik_mi():
+    try:
+        return settings_sheet.acell("B2").value.strip().lower() == "açık"
+    except Exception:
+        return False
+
+def talep_durumunu_ayarla(durum):
+    settings_sheet.update_acell("B2", durum)
+
+async def talep_ac(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    talep_durumunu_ayarla("açık")
+    await update.message.reply_text("✅ MESAİ TALEP ALIMI AÇILMIŞTIR\n\nPersoneller artık /start komutu ile mesai talebi oluşturabilir.")
+
+async def talep_kapa(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    talep_durumunu_ayarla("kapalı")
+    await update.message.reply_text("🔒 MESAİ TALEP ALIMI SONA ERMİŞTİR\n\nYeni mesai talebi alınmayacaktır.")
+
 TOKEN = "8859190739:AAHPizPBwxa8T-_bxEwFSuPSt4zaVafNIQE"
 
 NAME = 1
@@ -36,6 +60,12 @@ SPECIAL_TEXT = 6
 CONFIRM = 7
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not talep_durumu_acik_mi():
+        await update.message.reply_text(
+            "🔒 MESAİ TALEP ALIMI SONA ERMİŞTİR\n\nŞu anda yeni mesai talebi alınmamaktadır."
+        )
+        return ConversationHandler.END
+
     await update.message.reply_text(
         "🕒 MESAİ TALEP SİSTEMİ\n\n👤 Devam etmek için lütfen sistem adınızı yazınız:"
     )
@@ -232,6 +262,8 @@ CONFIRM: [
         fallbacks=[],
     )
 
+    app.add_handler(MessageHandler(filters.Regex(r"(?i)^talep aç$"), talep_ac))
+    app.add_handler(MessageHandler(filters.Regex(r"(?i)^talep kapa$"), talep_kapa))
     app.add_handler(conv)
 
     print("Bot çalışıyor...")
