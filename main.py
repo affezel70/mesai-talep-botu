@@ -37,7 +37,7 @@ CONFIRM = 7
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "👤 Lütfen sistem adınızı yazınız:"
+        "🕒 MESAİ TALEP SİSTEMİ\n\n👤 Devam etmek için lütfen sistem adınızı yazınız:"
     )
 
     return NAME
@@ -64,7 +64,7 @@ async def title_selected(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
 
     await query.message.reply_text(
-        "🕒 Lütfen talep ettiğiniz çalışma saatini seçiniz.",
+        "🕒 ÇALIŞMA SAATİ\n\nLütfen talep ettiğiniz çalışma saatini seçiniz.",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
@@ -89,20 +89,20 @@ async def get_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     title_keyboard = [
         [
-            InlineKeyboardButton("⭐ Operatör", callback_data="Operatör"),
-            InlineKeyboardButton("⭐⭐ Kıdemli Operatör", callback_data="Kıdemli Operatör"),
+            InlineKeyboardButton("⭐ OPERATÖR", callback_data="Operatör"),
+            InlineKeyboardButton("⭐⭐ KIDEMLİ OPERATÖR", callback_data="Kıdemli Operatör"),
         ],
         [
-            InlineKeyboardButton("⭐⭐⭐ Danışman", callback_data="Danışman"),
-            InlineKeyboardButton("⭐⭐⭐⭐ Kıdemli Danışman", callback_data="Kıdemli Danışman"),
+            InlineKeyboardButton("⭐⭐⭐ DANIŞMAN", callback_data="Danışman"),
+            InlineKeyboardButton("⭐⭐⭐⭐ KIDEMLİ DANIŞMAN", callback_data="Kıdemli Danışman"),
         ],
         [
-            InlineKeyboardButton("RMT", callback_data="RMT"),
+            InlineKeyboardButton("🎯 RMT", callback_data="RMT"),
         ],
     ]
 
     await update.message.reply_text(
-        f"Hoş geldiniz {context.user_data['isim']} 👋\n\n👔 Lütfen ünvanınızı seçiniz:",
+        f"👋 Hoş geldiniz, {context.user_data['isim']}!\n\n🕒 MESAİ TALEP SİSTEMİ\n\n👔 Lütfen ünvanınızı seçiniz:",
         reply_markup=InlineKeyboardMarkup(title_keyboard)
     )
 
@@ -133,7 +133,7 @@ async def shift_selected(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
 
     await query.message.reply_text(
-        "📅 Haftalık izin gününüzü seçiniz:",
+        "📅 HAFTALIK İZİN GÜNÜ\n\nLütfen haftalık izin gününüzü seçiniz:",
         reply_markup=InlineKeyboardMarkup(day_keyboard)
     )
 
@@ -147,12 +147,12 @@ async def day_selected(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["izin_gunu"] = query.data
 
     keyboard = [[
-        InlineKeyboardButton("✍️ Var", callback_data="var"),
-        InlineKeyboardButton("✅ Yok", callback_data="yok")
+        InlineKeyboardButton("✍️ EVET, VAR", callback_data="var"),
+        InlineKeyboardButton("✅ HAYIR, YOK", callback_data="yok")
     ]]
 
     await query.edit_message_text(
-        "📝 Özel durumunuz var mı?",
+        "📝 ÖZEL DURUM\n\nBelirtmek istediğiniz özel bir durum var mı?",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
@@ -168,32 +168,44 @@ async def special_selected(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data["ozel_durum"] = "Yok"
         return await show_confirm(query, context)
 
-    await query.edit_message_text("✍️ Lütfen özel durumunuzu yazınız:")
+    await query.edit_message_text("✍️ ÖZEL DURUM AÇIKLAMASI\n\nLütfen özel durumunuzu kısa ve açık şekilde yazınız:")
     return SPECIAL_TEXT
 
 
 async def special_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["ozel_durum"] = update.message.text
-    keyboard=[[InlineKeyboardButton("✏️ Düzenle",callback_data="edit"),
-               InlineKeyboardButton("✅ Gönder",callback_data="send")]]
+    keyboard=[
+        [InlineKeyboardButton("✅ TALEBİ GÖNDER", callback_data="send")],
+        [InlineKeyboardButton("✏️ BAŞTAN DÜZENLE", callback_data="edit")]
+    ]
     await update.message.reply_text(
-        f"📋 TALEP ÖZETİ\n\n"
-        f"👤 {context.user_data['unvan']} {context.user_data['isim']}\n"
-        f"🕒 {context.user_data['mesai']}\n"
-        f"📅 {context.user_data['izin_gunu']}\n"
-        f"📝 {context.user_data['ozel_durum']}",
+        f"📋 MESAİ TALEBİ ÖZETİ\n"
+        f"━━━━━━━━━━━━━━━━━━\n\n"
+        f"👤 Personel: {context.user_data['isim']}\n"
+        f"👔 Ünvan: {context.user_data['unvan']}\n"
+        f"🕒 Mesai: {context.user_data['mesai']}\n"
+        f"📅 İzin Günü: {context.user_data['izin_gunu']}\n"
+        f"📝 Özel Durum: {context.user_data['ozel_durum']}\n\n"
+        f"━━━━━━━━━━━━━━━━━━\n"
+        f"Bilgileri kontrol edip işleminizi seçiniz.",
         reply_markup=InlineKeyboardMarkup(keyboard))
     return CONFIRM
 
 async def show_confirm(query, context):
-    keyboard=[[InlineKeyboardButton("✏️ Düzenle",callback_data="edit"),
-               InlineKeyboardButton("✅ Gönder",callback_data="send")]]
+    keyboard=[
+        [InlineKeyboardButton("✅ TALEBİ GÖNDER", callback_data="send")],
+        [InlineKeyboardButton("✏️ BAŞTAN DÜZENLE", callback_data="edit")]
+    ]
     await query.edit_message_text(
-        f"📋 TALEP ÖZETİ\n\n"
-        f"👤 {context.user_data['unvan']} {context.user_data['isim']}\n"
-        f"🕒 {context.user_data['mesai']}\n"
-        f"📅 {context.user_data['izin_gunu']}\n"
-        f"📝 {context.user_data['ozel_durum']}",
+        f"📋 MESAİ TALEBİ ÖZETİ\n"
+        f"━━━━━━━━━━━━━━━━━━\n\n"
+        f"👤 Personel: {context.user_data['isim']}\n"
+        f"👔 Ünvan: {context.user_data['unvan']}\n"
+        f"🕒 Mesai: {context.user_data['mesai']}\n"
+        f"📅 İzin Günü: {context.user_data['izin_gunu']}\n"
+        f"📝 Özel Durum: {context.user_data['ozel_durum']}\n\n"
+        f"━━━━━━━━━━━━━━━━━━\n"
+        f"Bilgileri kontrol edip işleminizi seçiniz.",
         reply_markup=InlineKeyboardMarkup(keyboard))
     return CONFIRM
 
@@ -203,7 +215,7 @@ async def confirm_selected(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if query.data == "edit":
         await query.message.reply_text(
-            "Yeniden başlatmak için /start komutunu kullanın."
+            "✏️ Talebiniz iptal edildi.\n\nYeniden oluşturmak için /start komutunu kullanın."
         )
         return ConversationHandler.END
 
@@ -217,7 +229,7 @@ async def confirm_selected(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ])
 
         await query.edit_message_text(
-            "✅ Mesai talebiniz başarıyla gönderildi.\n\n📄 Talebiniz Google Sheets'e kaydedildi."
+            "✅ MESAİ TALEBİNİZ BAŞARIYLA GÖNDERİLDİ\n\n📄 Talebiniz sisteme kaydedildi.\nTeşekkür ederiz."
         )
 
     except Exception as e:
