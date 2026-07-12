@@ -172,9 +172,39 @@ SPECIAL = 5
 SPECIAL_TEXT = 6
 CONFIRM = 7
 UPDATE_CONFIRM = 8
+PREVIOUS_REQUEST = 9
+PREVIOUS_CONFIRM = 10
 
 def normalize_name(value):
     return " ".join(str(value).strip().casefold().split())
+
+def onceki_donem_bilgisi():
+    yil, ay = aktif_talep_ayi()
+    if ay == 1:
+        return yil - 1, 12
+    return yil, ay - 1
+
+
+def onceki_donem_adi():
+    yil, ay = onceki_donem_bilgisi()
+    return f"{AYLAR_TR[ay]} {yil} Mesai Talepleri"
+
+
+def onceki_talebi_bul(isim):
+    try:
+        ws = spreadsheet.worksheet(onceki_donem_adi())
+    except gspread.WorksheetNotFound:
+        return None
+
+    hedef = normalize_name(isim)
+    try:
+        for row in ws.get_all_values()[1:]:
+            if row and normalize_name(row[0]) == hedef:
+                return row[:5]
+    except Exception:
+        return None
+    return None
+
 
 def mevcut_talep_satiri(isim):
     try:
@@ -306,7 +336,6 @@ async def get_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return ConversationHandler.END
 
     row_number, row = mevcut_talep_satiri(context.user_data["isim"])
-
     if row_number:
         context.user_data["guncelleme_modu"] = True
         context.user_data["mevcut_satir"] = row_number
@@ -322,10 +351,41 @@ async def get_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "Aynı dönem için ikinci bir talep oluşturamazsınız.\n"
             "⏳ Talep süresi dolana kadar mevcut talebinizi güncelleyebilirsiniz."
             f"{mevcut_ozet}",
-            reply_markup=ReplyKeyboardMarkup([["✏️ TALEBİMİ GÜNCELLE"]], resize_keyboard=True, one_time_keyboard=True)
+            reply_markup=ReplyKeyboardMarkup(
+                [["✏️ TALEBİMİ GÜNCELLE"]],
+                resize_keyboard=True,
+                one_time_keyboard=True
+            )
         )
         return UPDATE_CONFIRM
 
+    onceki = onceki_talebi_bul(context.user_data["isim"])
+    if onceki and len(onceki) >= 5:
+        context.user_data["onceki_talep"] = onceki
+        await update.message.reply_text(
+            f"👋 Hoş geldiniz, {context.user_data['isim']}!\n\n"
+            f"📋 ÖNCEKİ DÖNEM TALEBİNİZ\n"
+            f"📁 {onceki_donem_adi()}\n\n"
+            f"👔 Ünvan: {onceki[1]}\n"
+            f"🕒 Mesai: {onceki[2]}\n"
+            f"📅 İzin Günü: {onceki[3]}\n"
+            f"📝 Özel Durum: {onceki[4]}\n\n"
+            "Bu dönem için önceki talebinizi kullanmak ister misiniz?",
+            reply_markup=ReplyKeyboardMarkup(
+                [
+                    ["⚡ ÖNCEKİ TALEBİMİ TEKRARLA"],
+                    ["✏️ YENİ TALEP OLUŞTUR"]
+                ],
+                resize_keyboard=True,
+                one_time_keyboard=True
+            )
+        )
+        return PREVIOUS_REQUEST
+
+    return await yeni_talep_baslat(update, context)
+
+
+async def yeni_talep_baslat(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["guncelleme_modu"] = False
     title_keyboard = [
         ["⭐ Operatör", "⭐⭐ Kıdemli Operatör"],
@@ -334,10 +394,113 @@ async def get_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ["⏳ KALAN SÜRE"]
     ]
     await update.message.reply_text(
-        f"👋 Hoş geldiniz, {context.user_data['isim']}!\n\n🕒 MESAİ TALEP SİSTEMİ\n\n👔 Lütfen ünvanınızı seçiniz:",
-        reply_markup=ReplyKeyboardMarkup(title_keyboard, resize_keyboard=True, one_time_keyboard=True)
+        f"👋 Hoş geldiniz, {context.user_data['isim']}!\n\n"
+        "🕒 MESAİ TALEP SİSTEMİ\n\n"
+        "👔 Lütfen ünvanınızı seçiniz:",
+        reply_markup=ReplyKeyboardMarkup(
+            title_keyboard,
+            resize_keyboard=True,
+            one_time_keyboard=True
+        )
     )
     return TITLE
+
+
+async def onceki_talep_secimi(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    secim = update.message.text
+
+    if secim == "✏️ YENİ TALEP OLUŞTUR":
+        return await yeni_talep_baslat(update, context)
+
+    if secim != "⚡ ÖNCEKİ TALEBİMİ TEKRARLA":
+        await update.message.reply_text("Lütfen aşağıdaki seçeneklerden birini kullanınız.")
+        return PREVIOUS_REQUEST
+
+    onceki = context.user_data.get("onceki_talep")
+    if not onceki or len(onceki) < 5:
+        await update.message.reply_text("❌ Önceki talep bulunamadı. Yeni talep oluşturabilirsiniz.")
+        return await yeni_talep_baslat(update, context)
+
+    await update.message.reply_text(
+        "⚡ TEKRARLANACAK TALEP\n"
+        "━━━━━━━━━━━━━━━━━━\n\n"
+        f"👤 Personel: {context.user_data['isim']}\n"
+        f"👔 Ünvan: {onceki[1]}\n"
+        f"🕒 Mesai: {onceki[2]}\n"
+        f"📅 İzin Günü: {onceki[3]}\n"
+        f"📝 Özel Durum: {onceki[4]}\n\n"
+        "━━━━━━━━━━━━━━━━━━\n"
+        "Talebi aynen oluşturabilir veya bilgileri güncelleyerek oluşturabilirsiniz.",
+        reply_markup=ReplyKeyboardMarkup(
+            [
+                ["✅ ONAYLA VE OLUŞTUR"],
+                ["✏️ GÜNCELLEYEREK OLUŞTUR"]
+            ],
+            resize_keyboard=True,
+            one_time_keyboard=True
+        )
+    )
+    return PREVIOUS_CONFIRM
+
+
+async def onceki_talep_onay(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    secim = update.message.text
+
+    if secim == "✏️ GÜNCELLEYEREK OLUŞTUR":
+        # Start the normal form with update-mode off; this creates the current month's first request.
+        context.user_data["guncelleme_modu"] = False
+        context.user_data.pop("mevcut_satir", None)
+        return await yeni_talep_baslat(update, context)
+
+    if secim != "✅ ONAYLA VE OLUŞTUR":
+        await update.message.reply_text("Lütfen aşağıdaki seçeneklerden birini kullanınız.")
+        return PREVIOUS_CONFIRM
+
+    # Prevent duplicate creation on repeated button taps.
+    row_number, _ = mevcut_talep_satiri(context.user_data["isim"])
+    if row_number:
+        await update.message.reply_text(
+            "ℹ️ Bu dönem için zaten bir mesai talebiniz bulunmaktadır. İkinci talep oluşturulmadı.",
+            reply_markup=ReplyKeyboardRemove()
+        )
+        return ConversationHandler.END
+
+    onceki = context.user_data.get("onceki_talep")
+    if not onceki or len(onceki) < 5:
+        await update.message.reply_text(
+            "❌ Önceki talep bilgileri bulunamadı.",
+            reply_markup=ReplyKeyboardRemove()
+        )
+        return ConversationHandler.END
+
+    yeni_veri = [
+        context.user_data["isim"],
+        onceki[1],
+        onceki[2],
+        onceki[3],
+        onceki[4]
+    ]
+
+    try:
+        aktif_talep_sheet().append_row(yeni_veri)
+        await update.message.reply_text(
+            "✅ MESAİ TALEBİNİZ BAŞARIYLA OLUŞTURULDU\n\n"
+            "⚡ Önceki dönem tercihleriniz aktif döneme aynen aktarıldı.\n"
+            "⏳ Talep süresi sona erene kadar mevcut talebinizi güncelleyebilirsiniz.",
+            reply_markup=ReplyKeyboardMarkup(
+                [["⏳ KALAN SÜRE"]],
+                resize_keyboard=True,
+                one_time_keyboard=False
+            )
+        )
+    except Exception as e:
+        await update.message.reply_text(
+            f"❌ Talep oluşturulurken hata oluştu.\n\n{e}",
+            reply_markup=ReplyKeyboardRemove()
+        )
+
+    return ConversationHandler.END
+
 
 async def shift_selected(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["mesai"] = update.message.text.split(" ", 1)[-1]
@@ -434,103 +597,4 @@ async def confirm_selected(update: Update, context: ContextTypes.DEFAULT_TYPE):
             context.user_data["isim"], context.user_data["unvan"],
             context.user_data["mesai"], context.user_data["izin_gunu"],
             context.user_data["ozel_durum"]
-        ]]
-        if context.user_data.get("guncelleme_modu") and context.user_data.get("mevcut_satir"):
-            row_number = context.user_data["mevcut_satir"]
-            aktif_talep_sheet().update(f"A{row_number}:E{row_number}", yeni_veri)
-            basari_mesaji = (
-                "✅ MESAİ TALEBİNİZ BAŞARIYLA GÜNCELLENDİ\n\n"
-                "📄 Mevcut talebiniz yeni bilgilerinizle güncellendi.\n"
-                "⏳ Talep süresi sona erene kadar tekrar güncelleyebilirsiniz."
-            )
-        else:
-            aktif_talep_sheet().append_row(yeni_veri[0])
-            basari_mesaji = (
-                "✅ MESAİ TALEBİNİZ BAŞARIYLA GÖNDERİLDİ\n\n"
-                "📄 Talebiniz sisteme kaydedildi.\n"
-                "⏳ Talep süresi sona erene kadar mevcut talebinizi güncelleyebilirsiniz.\n"
-                "⚠️ Aynı dönem için ikinci bir talep oluşturamazsınız."
-            )
-        await update.message.reply_text(basari_mesaji, reply_markup=ReplyKeyboardRemove())
-
-    except Exception as e:
-        await update.message.reply_text(
-            f"❌ Kayıt sırasında hata oluştu.\n\n{e}",
-            reply_markup=ReplyKeyboardRemove()
-        )
-
-    return ConversationHandler.END
-
-
-async def kalan_sure(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if sure_doldu_mu():
-        talep_durumunu_ayarla("kapalı")
-        await update.message.reply_text(
-            "🔒 MESAİ TALEP ALIMI SONA ERMİŞTİR\n\n"
-            f"📅 Son talep günü: {tarih_metni(son_talep_gunu())}"
-        )
-        return
-
-    durum = "🟢 Talep alımı devam ediyor." if talep_durumu_acik_mi() else "🔒 Talep alımı şu anda kapalı."
-    await update.message.reply_text(
-        f"{durum}\n\n"
-        f"📅 Son talep günü: {tarih_metni(son_talep_gunu())}\n"
-        f"{kalan_sure_metni()}",
-        reply_markup=ReplyKeyboardMarkup(
-            [["⏳ KALAN SÜRE"]],
-            resize_keyboard=True,
-            one_time_keyboard=False
-        )
-    )
-
-
-def main():
-
-    app = Application.builder().token(TOKEN).build()
-
-    conv = ConversationHandler(
-        entry_points=[CommandHandler("start", start)],
-        states={
-    TITLE: [
-        MessageHandler(filters.TEXT & ~filters.COMMAND, title_selected)
-    ],
-    NAME: [
-        MessageHandler(filters.TEXT & ~filters.COMMAND, get_name)
-    ],
-    SHIFT: [
-        MessageHandler(filters.TEXT & ~filters.COMMAND, shift_selected)
-    ],
-    DAY: [
-        MessageHandler(filters.TEXT & ~filters.COMMAND, day_selected)
-    ],
-SPECIAL: [
-    MessageHandler(filters.TEXT & ~filters.COMMAND, special_selected)
-],
-
-SPECIAL_TEXT: [
-    MessageHandler(filters.TEXT & ~filters.COMMAND, special_text)
-],
-CONFIRM: [
-    MessageHandler(filters.TEXT & ~filters.COMMAND, confirm_selected)
-],
-UPDATE_CONFIRM: [
-    MessageHandler(filters.Regex(r"^✏️ TALEBİMİ GÜNCELLE$"), guncelleme_baslat)
-]},
-        
-        fallbacks=[],
-        allow_reentry=True,
-    )
-
-    app.add_handler(MessageHandler(filters.Regex(r"(?i)^.+\s+engel kaldır$"), kullanici_engel_kaldir))
-    app.add_handler(MessageHandler(filters.Regex(r"(?i)^.+\s+engelle$"), kullanici_engelle))
-    app.add_handler(MessageHandler(filters.Regex(r"(?i)^talep aç$"), talep_ac))
-    app.add_handler(MessageHandler(filters.Regex(r"(?i)^talep kapa$"), talep_kapa))
-    app.add_handler(MessageHandler(filters.Regex(r"^⏳ KALAN SÜRE$"), kalan_sure))
-    app.add_handler(conv)
-
-    print("Bot çalışıyor...")
-    app.run_polling(drop_pending_updates=True)
-
-if __name__ == "__main__":
-    asyncio.set_event_loop(asyncio.new_event_loop())
-    main()
+       
