@@ -34,6 +34,12 @@ except gspread.WorksheetNotFound:
     settings_sheet = spreadsheet.add_worksheet(title="AYARLAR", rows=10, cols=2)
     settings_sheet.update("A1:B2", [["Ayar", "Değer"], ["talep_durumu", "kapalı"]])
 
+try:
+    blocked_sheet = spreadsheet.worksheet("ENGELLENENLER")
+except gspread.WorksheetNotFound:
+    blocked_sheet = spreadsheet.add_worksheet(title="ENGELLENENLER", rows=100, cols=1)
+    blocked_sheet.update_acell("A1", "Sistem Adı")
+
 TALEP_BITIS = datetime(2026, 8, 1, 0, 0, 0, tzinfo=ZoneInfo("Europe/Istanbul"))
 
 def kalan_sure_metni():
@@ -127,6 +133,58 @@ async def guncelleme_baslat(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     return TITLE
 
+def engelli_mi(isim):
+    hedef = normalize_name(isim)
+    try:
+        for value in blocked_sheet.col_values(1)[1:]:
+            if normalize_name(value) == hedef:
+                return True
+    except Exception:
+        pass
+    return False
+
+
+async def kullanici_engelle(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    metin = update.message.text.strip()
+    isim = metin[:-len(" engelle")].strip()
+
+    if not isim:
+        await update.message.reply_text("❌ Engellenecek sistem adını yazınız.\n\nÖrnek: RMT.Özge engelle")
+        return
+
+    if engelli_mi(isim):
+        await update.message.reply_text(f"ℹ️ {isim} zaten engelli kullanıcılar listesinde.")
+        return
+
+    blocked_sheet.append_row([isim])
+    await update.message.reply_text(
+        f"🚫 {isim} ENGELLENDİ\n\n"
+        "Bu kullanıcı artık mesai talebi oluşturamaz veya mevcut talebini güncelleyemez."
+    )
+
+
+async def kullanici_engel_kaldir(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    metin = update.message.text.strip()
+    isim = metin[:-len(" engel kaldır")].strip()
+    hedef = normalize_name(isim)
+
+    try:
+        values = blocked_sheet.col_values(1)
+        for row_number, value in enumerate(values, start=1):
+            if row_number > 1 and normalize_name(value) == hedef:
+                blocked_sheet.delete_rows(row_number)
+                await update.message.reply_text(
+                    f"✅ {isim} ÜZERİNDEKİ ENGEL KALDIRILDI\n\n"
+                    "Talep dönemi açıksa kullanıcı yeniden mesai talebi oluşturabilir."
+                )
+                return
+    except Exception as e:
+        await update.message.reply_text(f"❌ Engel kaldırılırken hata oluştu.\n\n{e}")
+        return
+
+    await update.message.reply_text(f"ℹ️ {isim} engelli kullanıcılar listesinde bulunamadı.")
+
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not talep_durumu_acik_mi():
         await update.message.reply_text(
@@ -166,6 +224,16 @@ async def title_selected(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def get_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["isim"] = update.message.text.strip()
+
+    if engelli_mi(context.user_data["isim"]):
+        await update.message.reply_text(
+            "⛔ MESAİ TALEBİ YETKİNİZ BULUNMAMAKTADIR\n\n"
+            "Bu kullanıcı için mesai talebi oluşturma ve güncelleme işlemleri kapatılmıştır.\n"
+            "Detaylı bilgi için yöneticinizle iletişime geçiniz.",
+            reply_markup=ReplyKeyboardRemove()
+        )
+        return ConversationHandler.END
+
     row_number, row = mevcut_talep_satiri(context.user_data["isim"])
 
     if row_number:
@@ -376,6 +444,8 @@ UPDATE_CONFIRM: [
         fallbacks=[],
     )
 
+    app.add_handler(MessageHandler(filters.Regex(r"(?i)^.+\s+engel kaldır$"), kullanici_engel_kaldir))
+    app.add_handler(MessageHandler(filters.Regex(r"(?i)^.+\s+engelle$"), kullanici_engelle))
     app.add_handler(MessageHandler(filters.Regex(r"(?i)^talep aç$"), talep_ac))
     app.add_handler(MessageHandler(filters.Regex(r"(?i)^talep kapa$"), talep_kapa))
     app.add_handler(MessageHandler(filters.Regex(r"^⏳ KALAN SÜRE$"), kalan_sure))
