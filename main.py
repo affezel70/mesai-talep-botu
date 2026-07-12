@@ -442,6 +442,7 @@ UPDATE_CONFIRM: [
 ]},
         
         fallbacks=[],
+        allow_reentry=True,
     )
 
     app.add_handler(MessageHandler(filters.Regex(r"(?i)^.+\s+engel kaldır$"), kullanici_engel_kaldir))
