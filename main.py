@@ -40,6 +40,12 @@ except gspread.WorksheetNotFound:
     blocked_sheet = spreadsheet.add_worksheet(title="ENGELLENENLER", rows=100, cols=1)
     blocked_sheet.update_acell("A1", "Sistem Adı")
 
+try:
+    users_sheet = spreadsheet.worksheet("KULLANICILAR")
+except gspread.WorksheetNotFound:
+    users_sheet = spreadsheet.add_worksheet(title="KULLANICILAR", rows=1000, cols=4)
+    users_sheet.update("A1:D1", [["Telegram ID", "Sistem Adı", "Ünvan", "Son Güncelleme"]])
+
 AYLAR_TR = {
     1: "Ocak", 2: "Şubat", 3: "Mart", 4: "Nisan",
     5: "Mayıs", 6: "Haziran", 7: "Temmuz", 8: "Ağustos",
@@ -289,12 +295,90 @@ async def kullanici_engel_kaldir(update: Update, context: ContextTypes.DEFAULT_T
     await update.message.reply_text(f"ℹ️ {isim} engelli kullanıcılar listesinde bulunamadı.")
 
 
+
+def kayitli_kullanici_bul(telegram_id):
+    try:
+        hedef = str(telegram_id)
+        for row_number, row in enumerate(users_sheet.get_all_values()[1:], start=2):
+            if row and str(row[0]).strip() == hedef:
+                return row_number, row
+    except Exception as e:
+        print(f"KULLANICILAR okuma hatası: {e}")
+    return None, None
+
+def kullanici_kaydet(telegram_id, isim, unvan):
+    telegram_id = str(telegram_id)
+    zaman = datetime.now(ZoneInfo("Europe/Istanbul")).strftime("%Y-%m-%d %H:%M:%S")
+    row_number, _ = kayitli_kullanici_bul(telegram_id)
+    veri = [[telegram_id, isim, unvan, zaman]]
+    if row_number:
+        users_sheet.update(f"A{row_number}:D{row_number}", veri)
+    else:
+        users_sheet.append_row(veri[0])
+
+def kullanici_kaydini_guncelle(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        telegram_id = update.effective_user.id
+        isim = context.user_data.get("isim")
+        unvan = context.user_data.get("unvan")
+        if telegram_id and isim and unvan:
+            kullanici_kaydet(telegram_id, isim, unvan)
+    except Exception as e:
+        print(f"KULLANICILAR kayıt hatası: {e}")
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not talep_durumu_acik_mi():
         await update.message.reply_text(
             "🔒 MESAİ TALEP ALIMI SONA ERMİŞTİR\n\nŞu anda yeni mesai talebi alınmamaktadır."
         )
         return ConversationHandler.END
+
+    telegram_id = update.effective_user.id
+    _, kayitli = kayitli_kullanici_bul(telegram_id)
+
+    if kayitli and len(kayitli) >= 3 and kayitli[1].strip() and kayitli[2].strip():
+        context.user_data["isim"] = kayitli[1].strip()
+        context.user_data["unvan"] = kayitli[2].strip()
+
+        if engelli_mi(context.user_data["isim"]):
+            await update.message.reply_text("⛔ MESAİ TALEBİ YETKİNİZ BULUNMAMAKTADIR", reply_markup=ReplyKeyboardRemove())
+            return ConversationHandler.END
+
+        row_number, row = mevcut_talep_satiri(context.user_data["isim"])
+        if row_number:
+            context.user_data["guncelleme_modu"] = True
+            context.user_data["mevcut_satir"] = row_number
+            await update.message.reply_text(
+                f"👋 Hoş geldiniz, {context.user_data['isim']}!\n\nℹ️ Bu dönem için zaten bir mesai talebiniz bulunmaktadır.",
+                reply_markup=ReplyKeyboardMarkup([["✏️ TALEBİMİ GÜNCELLE"]], resize_keyboard=True, one_time_keyboard=True)
+            )
+            return UPDATE_CONFIRM
+
+        onceki = onceki_talebi_bul(context.user_data["isim"])
+        if onceki and len(onceki) >= 5:
+            context.user_data["onceki_talep"] = onceki
+            await update.message.reply_text(
+                f"👋 Hoş geldiniz, {context.user_data['isim']}!\n\n"
+                f"📋 ÖNCEKİ DÖNEM TALEBİNİZ\n👔 Ünvan: {onceki[1]}\n🕒 Mesai: {onceki[2]}\n"
+                f"📅 İzin Günü: {onceki[3]}\n📝 Özel Durum: {onceki[4]}\n\n"
+                "Bu dönem için önceki talebinizi kullanmak ister misiniz?",
+                reply_markup=ReplyKeyboardMarkup(
+                    [["⚡ ÖNCEKİ TALEBİMİ TEKRARLA"], ["✏️ YENİ TALEP OLUŞTUR"]],
+                    resize_keyboard=True, one_time_keyboard=True
+                )
+            )
+            return PREVIOUS_REQUEST
+
+        context.user_data["guncelleme_modu"] = False
+        await update.message.reply_text(
+            f"👋 Hoş geldiniz, {context.user_data['isim']}!\n👔 Kayıtlı ünvanınız: {context.user_data['unvan']}\n\n"
+            "🕒 Lütfen talep ettiğiniz çalışma saatini seçiniz.",
+            reply_markup=ReplyKeyboardMarkup(
+                [["🌅 05:00-14:00", "☀️ 08:00-17:00"], ["🌤️ 11:00-20:00", "🌇 14:00-23:00"], ["🌙 17:00-02:00", "🌃 20:00-05:00"]],
+                resize_keyboard=True, one_time_keyboard=True
+            )
+        )
+        return SHIFT
 
     await update.message.reply_text(
         "🕒 MESAİ TALEP SİSTEMİ\n\n"
@@ -492,6 +576,8 @@ async def onceki_talep_onay(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     try:
         aktif_talep_sheet().append_row(yeni_veri)
+        context.user_data["unvan"] = onceki[1]
+        kullanici_kaydini_guncelle(update, context)
         await update.message.reply_text(
             "✅ MESAİ TALEBİNİZ BAŞARIYLA OLUŞTURULDU\n\n"
             "⚡ Önceki dönem tercihleriniz aktif döneme aynen aktarıldı.\n"
@@ -623,6 +709,7 @@ async def confirm_selected(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "⏳ Talep süresi sona erene kadar mevcut talebinizi güncelleyebilirsiniz.\n"
                 "⚠️ Aynı dönem için ikinci bir talep oluşturamazsınız."
             )
+        kullanici_kaydini_guncelle(update, context)
         await update.message.reply_text(basari_mesaji, reply_markup=ReplyKeyboardRemove())
 
     except Exception as e:
