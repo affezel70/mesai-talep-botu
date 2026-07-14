@@ -53,47 +53,74 @@ AYLAR_TR = {
 }
 
 
+def ayar_degeri(anahtar, varsayilan=""):
+    try:
+        values = settings_sheet.get_all_values()
+        for row in values[1:]:
+            if len(row) >= 2 and row[0].strip() == anahtar:
+                return row[1].strip()
+    except Exception:
+        pass
+    return varsayilan
+
+
+def ayar_yaz(anahtar, deger):
+    values = settings_sheet.get_all_values()
+    for row_number, row in enumerate(values[1:], start=2):
+        if row and row[0].strip() == anahtar:
+            settings_sheet.update(f"A{row_number}:B{row_number}", [[anahtar, str(deger)]])
+            return
+    settings_sheet.append_row([anahtar, str(deger)])
+
+
+def zaman_ayarini_oku(anahtar):
+    deger = ayar_degeri(anahtar)
+    if not deger:
+        return None
+    try:
+        return datetime.strptime(deger, "%d.%m.%Y %H:%M").replace(tzinfo=ZoneInfo("Europe/Istanbul"))
+    except ValueError:
+        return None
+
+
+def zaman_ayarini_yaz(anahtar, dt):
+    ayar_yaz(anahtar, dt.strftime("%d.%m.%Y %H:%M"))
+
+
 def aktif_talep_ayi():
-    """
-    İçinde bulunduğumuz tarihe göre sıradaki mesai dönemini belirler.
-    Örnek: Temmuz sonunda toplanan talepler Ağustos ayı sekmesine gider.
-    Bir dönemin kapanışından sonra otomatik olarak sonraki ayın dönemine geçilir.
-    """
+    """Planlanan dönem varsa bitiş tarihinin ait olduğu ayı; yoksa eski otomatik mantığı kullanır."""
+    bitis = zaman_ayarini_oku("talep_bitis")
+    if bitis:
+        hedef = bitis - timedelta(seconds=1)
+        return hedef.year, hedef.month
+
     simdi = datetime.now(ZoneInfo("Europe/Istanbul"))
-
-    # Önce içinde bulunduğumuz ayı aday dönem olarak kontrol et.
-    aday_yil = simdi.year
-    aday_ay = simdi.month
-
+    aday_yil, aday_ay = simdi.year, simdi.month
     bitis = talep_bitis_zamani(aday_yil, aday_ay)
     if simdi >= bitis:
         if aday_ay == 12:
-            aday_ay = 1
-            aday_yil += 1
-        else:
-            aday_ay += 1
-
+            return aday_yil + 1, 1
+        return aday_yil, aday_ay + 1
     return aday_yil, aday_ay
 
 
 def talep_bitis_zamani(yil, ay):
-    """
-    İlgili ayın ilk pazartesisinden önceki cuma gününü son talep günü yapar.
-    Cuma günü boyunca talep alınır; teknik kapanış cumartesi 00:00'dır.
-    """
     ilk_gun = datetime(yil, ay, 1, tzinfo=ZoneInfo("Europe/Istanbul"))
     ilk_pazartesi = ilk_gun + timedelta(days=(7 - ilk_gun.weekday()) % 7)
     son_cuma = ilk_pazartesi - timedelta(days=3)
     return (son_cuma + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
 
 
+def aktif_baslangic_zamani():
+    return zaman_ayarini_oku("talep_baslangic")
+
+
 def aktif_bitis_zamani():
-    yil, ay = aktif_talep_ayi()
-    return talep_bitis_zamani(yil, ay)
+    return zaman_ayarini_oku("talep_bitis") or talep_bitis_zamani(*aktif_talep_ayi())
 
 
 def son_talep_gunu():
-    return aktif_bitis_zamani() - timedelta(days=1)
+    return aktif_bitis_zamani() - timedelta(seconds=1)
 
 
 def aktif_donem_adi():
@@ -102,18 +129,12 @@ def aktif_donem_adi():
 
 
 def aktif_talep_sheet():
-    """
-    Aktif ayın çalışma sayfasını bulur; yoksa otomatik oluşturur.
-    """
     baslik = aktif_donem_adi()
     try:
         ws = spreadsheet.worksheet(baslik)
     except gspread.WorksheetNotFound:
         ws = spreadsheet.add_worksheet(title=baslik, rows=1000, cols=10)
-        ws.update(
-            "A1:E1",
-            [["Personel", "Ünvan", "Mesai", "İzin Günü", "Özel Durum"]]
-        )
+        ws.update("A1:E1", [["Personel", "Ünvan", "Mesai", "İzin Günü", "Özel Durum"]])
     return ws
 
 
@@ -121,9 +142,21 @@ def tarih_metni(dt):
     return f"{dt.day} {AYLAR_TR[dt.month]} {dt.year}"
 
 
+def tarih_saat_metni(dt):
+    return dt.strftime("%d.%m.%Y %H:%M")
+
+
 def kalan_sure_metni():
     simdi = datetime.now(ZoneInfo("Europe/Istanbul"))
-    kalan = aktif_bitis_zamani() - simdi
+    baslangic = aktif_baslangic_zamani()
+    bitis = aktif_bitis_zamani()
+
+    if baslangic and simdi < baslangic:
+        kalan = baslangic - simdi
+        on_ek = "⏳ Açılışa kalan süre:"
+    else:
+        kalan = bitis - simdi
+        on_ek = "⏳ Kapanışa kalan süre:"
 
     if kalan.total_seconds() <= 0:
         return "⏳ Süre doldu."
@@ -132,10 +165,9 @@ def kalan_sure_metni():
     gun, kalan_saniye = divmod(toplam_saniye, 86400)
     saat, kalan_saniye = divmod(kalan_saniye, 3600)
     dakika, saniye = divmod(kalan_saniye, 60)
-
     if gun > 0:
-        return f"⏳ Kalan süre: {gun} gün {saat} saat {dakika} dakika {saniye} saniye"
-    return f"⏳ Kalan süre: {saat} saat {dakika} dakika {saniye} saniye"
+        return f"{on_ek} {gun} gün {saat} saat {dakika} dakika {saniye} saniye"
+    return f"{on_ek} {saat} saat {dakika} dakika {saniye} saniye"
 
 
 def sure_doldu_mu():
@@ -143,39 +175,23 @@ def sure_doldu_mu():
 
 
 def talep_durumu_acik_mi():
-    try:
-        if sure_doldu_mu():
-            if settings_sheet.acell("B2").value.strip().lower() != "kapalı":
-                talep_durumunu_ayarla("kapalı")
+    simdi = datetime.now(ZoneInfo("Europe/Istanbul"))
+    baslangic = aktif_baslangic_zamani()
+    bitis = zaman_ayarini_oku("talep_bitis")
+
+    if baslangic and bitis:
+        if simdi < baslangic:
             return False
-        return settings_sheet.acell("B2").value.strip().lower() == "açık"
-    except Exception:
-        return False
+        if simdi >= bitis:
+            return False
+        return True
+
+    return ayar_degeri("talep_durumu", "kapalı").lower() == "açık"
+
 
 def talep_durumunu_ayarla(durum):
-    settings_sheet.update_acell("B2", durum)
+    ayar_yaz("talep_durumu", durum)
 
-async def talep_ac(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if sure_doldu_mu():
-        talep_durumunu_ayarla("kapalı")
-        await update.message.reply_text(
-            "🔒 Belirlenen talep süresi sona ermiştir.\n\n"
-            f"Son talep günü: {tarih_metni(son_talep_gunu())}"
-        )
-        return
-
-    talep_durumunu_ayarla("açık")
-    await update.message.reply_text(
-        "✅ MESAİ TALEP ALIMI AÇILMIŞTIR\n\n"
-        f"📁 Dönem: {aktif_donem_adi()}\n"
-        f"📅 Son talep günü: {tarih_metni(son_talep_gunu())}\n"
-        f"{kalan_sure_metni()}\n\n"
-        "Personeller artık /start komutu ile mesai talebi oluşturabilir."
-    )
-
-async def talep_kapa(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    talep_durumunu_ayarla("kapalı")
-    await update.message.reply_text("🔒 MESAİ TALEP ALIMI SONA ERMİŞTİR\n\nYeni mesai talebi alınmayacaktır.")
 
 TOKEN = "8859190739:AAHPizPBwxa8T-_bxEwFSuPSt4zaVafNIQE"
 
@@ -189,6 +205,14 @@ CONFIRM = 7
 UPDATE_CONFIRM = 8
 PREVIOUS_REQUEST = 9
 PREVIOUS_CONFIRM = 10
+PANEL = 20
+PANEL_START_DATE = 21
+PANEL_START_TIME = 22
+PANEL_END_DATE = 23
+PANEL_END_TIME = 24
+PANEL_PERIOD_CONFIRM = 25
+PANEL_BLOCK_NAME = 26
+PANEL_UNBLOCK_NAME = 27
 
 def normalize_name(value):
     return " ".join(str(value).strip().casefold().split())
@@ -743,6 +767,226 @@ async def kalan_sure(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
+
+def yonetici_mi(update: Update):
+    """Yönetici ID'leri Railway ADMIN_IDS değişkeninden okunur. Örn: 123456789,987654321"""
+    raw = os.environ.get("ADMIN_IDS", "").strip()
+    izinli = {x.strip() for x in raw.split(",") if x.strip()}
+    return str(update.effective_user.id) in izinli
+
+
+def panel_klavyesi():
+    return ReplyKeyboardMarkup(
+        [
+            ["📅 TALEP DÖNEMİ OLUŞTUR", "📊 TALEP DÖNEMİ DURUMU"],
+            ["🟢 TALEPLERİ MANUEL AÇ", "🔴 TALEPLERİ MANUEL KAPAT"],
+            ["🚫 KULLANICI ENGELLE", "✅ ENGEL KALDIR"],
+            ["❌ PANELİ KAPAT"]
+        ],
+        resize_keyboard=True,
+        one_time_keyboard=False
+    )
+
+
+async def panel_ac(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not yonetici_mi(update):
+        await update.message.reply_text("⛔ Bu komut yalnızca yöneticiler içindir.")
+        return ConversationHandler.END
+    await update.message.reply_text("🛠️ YÖNETİCİ PANELİ\n\nYapmak istediğiniz işlemi seçiniz:", reply_markup=panel_klavyesi())
+    return PANEL
+
+
+async def panel_secim(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    secim = update.message.text.strip()
+
+    if secim == "❌ PANELİ KAPAT":
+        await update.message.reply_text("✅ Yönetici paneli kapatıldı.", reply_markup=ReplyKeyboardRemove())
+        return ConversationHandler.END
+
+    if secim == "📅 TALEP DÖNEMİ OLUŞTUR":
+        await update.message.reply_text(
+            "📅 Talep döneminin BAŞLANGIÇ tarihini yazınız.\n\nÖrnek: 30.07.2026",
+            reply_markup=ReplyKeyboardRemove()
+        )
+        return PANEL_START_DATE
+
+    if secim == "📊 TALEP DÖNEMİ DURUMU":
+        baslangic = aktif_baslangic_zamani()
+        bitis = zaman_ayarini_oku("talep_bitis")
+        durum = "🟢 AÇIK" if talep_durumu_acik_mi() else "🔴 KAPALI"
+        await update.message.reply_text(
+            "📊 TALEP DÖNEMİ DURUMU\n\n"
+            f"Durum: {durum}\n"
+            f"📁 Dönem: {aktif_donem_adi()}\n"
+            f"🟢 Başlangıç: {tarih_saat_metni(baslangic) if baslangic else 'Ayarlanmadı'}\n"
+            f"🔴 Bitiş: {tarih_saat_metni(bitis) if bitis else 'Ayarlanmadı'}\n"
+            f"{kalan_sure_metni()}",
+            reply_markup=panel_klavyesi()
+        )
+        return PANEL
+
+    if secim == "🟢 TALEPLERİ MANUEL AÇ":
+        # Planlı dönemi kaldırıp manuel açık moda geçer.
+        ayar_yaz("talep_baslangic", "")
+        ayar_yaz("talep_bitis", "")
+        talep_durumunu_ayarla("açık")
+        await update.message.reply_text("🟢 Mesai talep alımı manuel olarak AÇILDI.", reply_markup=panel_klavyesi())
+        return PANEL
+
+    if secim == "🔴 TALEPLERİ MANUEL KAPAT":
+        # Planlı dönemi kaldırıp manuel kapalı moda geçer.
+        ayar_yaz("talep_baslangic", "")
+        ayar_yaz("talep_bitis", "")
+        talep_durumunu_ayarla("kapalı")
+        await update.message.reply_text("🔴 Mesai talep alımı manuel olarak KAPATILDI.", reply_markup=panel_klavyesi())
+        return PANEL
+
+    if secim == "🚫 KULLANICI ENGELLE":
+        await update.message.reply_text("🚫 Engellemek istediğiniz kullanıcının sistem adını yazınız:", reply_markup=ReplyKeyboardRemove())
+        return PANEL_BLOCK_NAME
+
+    if secim == "✅ ENGEL KALDIR":
+        await update.message.reply_text("✅ Engelini kaldırmak istediğiniz kullanıcının sistem adını yazınız:", reply_markup=ReplyKeyboardRemove())
+        return PANEL_UNBLOCK_NAME
+
+    await update.message.reply_text("Lütfen paneldeki butonlardan birini kullanınız.", reply_markup=panel_klavyesi())
+    return PANEL
+
+
+def panel_tarih_parse(metin):
+    return datetime.strptime(metin.strip(), "%d.%m.%Y")
+
+
+def panel_saat_parse(metin):
+    return datetime.strptime(metin.strip(), "%H:%M")
+
+
+async def panel_baslangic_tarihi(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        dt = panel_tarih_parse(update.message.text)
+        context.user_data["panel_baslangic_tarih"] = dt.strftime("%d.%m.%Y")
+    except ValueError:
+        await update.message.reply_text("❌ Geçersiz tarih. Örnek format: 30.07.2026")
+        return PANEL_START_DATE
+    await update.message.reply_text("🕒 Başlangıç saatini yazınız.\n\nÖrnek: 00:00")
+    return PANEL_START_TIME
+
+
+async def panel_baslangic_saati(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        saat = panel_saat_parse(update.message.text)
+        context.user_data["panel_baslangic_saat"] = saat.strftime("%H:%M")
+    except ValueError:
+        await update.message.reply_text("❌ Geçersiz saat. Örnek format: 00:00")
+        return PANEL_START_TIME
+    await update.message.reply_text("📅 Talep döneminin BİTİŞ tarihini yazınız.\n\nÖrnek: 01.08.2026")
+    return PANEL_END_DATE
+
+
+async def panel_bitis_tarihi(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        dt = panel_tarih_parse(update.message.text)
+        context.user_data["panel_bitis_tarih"] = dt.strftime("%d.%m.%Y")
+    except ValueError:
+        await update.message.reply_text("❌ Geçersiz tarih. Örnek format: 01.08.2026")
+        return PANEL_END_DATE
+    await update.message.reply_text("🕒 Bitiş saatini yazınız.\n\nÖrnek: 00:00")
+    return PANEL_END_TIME
+
+
+async def panel_bitis_saati(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        panel_saat_parse(update.message.text)
+        context.user_data["panel_bitis_saat"] = update.message.text.strip()
+        baslangic = datetime.strptime(
+            f"{context.user_data['panel_baslangic_tarih']} {context.user_data['panel_baslangic_saat']}",
+            "%d.%m.%Y %H:%M"
+        ).replace(tzinfo=ZoneInfo("Europe/Istanbul"))
+        bitis = datetime.strptime(
+            f"{context.user_data['panel_bitis_tarih']} {context.user_data['panel_bitis_saat']}",
+            "%d.%m.%Y %H:%M"
+        ).replace(tzinfo=ZoneInfo("Europe/Istanbul"))
+        if bitis <= baslangic:
+            await update.message.reply_text("❌ Bitiş zamanı başlangıç zamanından sonra olmalıdır.")
+            return PANEL_END_TIME
+        context.user_data["panel_baslangic_dt"] = baslangic
+        context.user_data["panel_bitis_dt"] = bitis
+    except ValueError:
+        await update.message.reply_text("❌ Geçersiz saat. Örnek format: 00:00")
+        return PANEL_END_TIME
+
+    await update.message.reply_text(
+        "📅 TALEP DÖNEMİ ÖZETİ\n\n"
+        f"🟢 Başlangıç: {tarih_saat_metni(baslangic)}\n"
+        f"🔴 Bitiş: {tarih_saat_metni(bitis)}\n\n"
+        "Bu tarih aralığını kaydetmek istiyor musunuz?",
+        reply_markup=ReplyKeyboardMarkup([["✅ DÖNEMİ KAYDET"], ["❌ İPTAL"]], resize_keyboard=True, one_time_keyboard=True)
+    )
+    return PANEL_PERIOD_CONFIRM
+
+
+async def panel_donem_onay(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.message.text == "❌ İPTAL":
+        await update.message.reply_text("İşlem iptal edildi.", reply_markup=panel_klavyesi())
+        return PANEL
+    if update.message.text != "✅ DÖNEMİ KAYDET":
+        await update.message.reply_text("Lütfen onay butonlarından birini kullanınız.")
+        return PANEL_PERIOD_CONFIRM
+
+    baslangic = context.user_data["panel_baslangic_dt"]
+    bitis = context.user_data["panel_bitis_dt"]
+    zaman_ayarini_yaz("talep_baslangic", baslangic)
+    zaman_ayarini_yaz("talep_bitis", bitis)
+    talep_durumunu_ayarla("planlı")
+    ayar_yaz("son_donem_olusturma", datetime.now(ZoneInfo("Europe/Istanbul")).strftime("%d.%m.%Y %H:%M"))
+
+    await update.message.reply_text(
+        "✅ TALEP DÖNEMİ OLUŞTURULDU\n\n"
+        f"🟢 Başlangıç: {tarih_saat_metni(baslangic)}\n"
+        f"🔴 Bitiş: {tarih_saat_metni(bitis)}\n\n"
+        "Bot Türkiye saatine göre bu aralıkta otomatik olarak talep kabul edecektir.",
+        reply_markup=panel_klavyesi()
+    )
+    return PANEL
+
+
+async def panel_kullanici_engelle(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    isim = update.message.text.strip()
+    if not isim:
+        await update.message.reply_text("❌ Lütfen bir sistem adı yazınız.")
+        return PANEL_BLOCK_NAME
+    if engelli_mi(isim):
+        await update.message.reply_text(f"ℹ️ {isim} zaten engelli.", reply_markup=panel_klavyesi())
+        return PANEL
+    blocked_sheet.append_row([isim])
+    await update.message.reply_text(f"🚫 {isim} engellendi.", reply_markup=panel_klavyesi())
+    return PANEL
+
+
+async def panel_engel_kaldir(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    isim = update.message.text.strip()
+    hedef = normalize_name(isim)
+    try:
+        values = blocked_sheet.col_values(1)
+        for row_number, value in enumerate(values, start=1):
+            if row_number > 1 and normalize_name(value) == hedef:
+                blocked_sheet.delete_rows(row_number)
+                await update.message.reply_text(f"✅ {isim} üzerindeki engel kaldırıldı.", reply_markup=panel_klavyesi())
+                return PANEL
+    except Exception as e:
+        await update.message.reply_text(f"❌ Hata oluştu: {e}", reply_markup=panel_klavyesi())
+        return PANEL
+    await update.message.reply_text(f"ℹ️ {isim} engelli listesinde bulunamadı.", reply_markup=panel_klavyesi())
+    return PANEL
+
+
+async def panel_iptal(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not yonetici_mi(update):
+        return ConversationHandler.END
+    await update.message.reply_text("İşlem iptal edildi. Yönetici paneli yeniden açıldı.", reply_markup=panel_klavyesi())
+    return PANEL
+
+
 def main():
 
     app = Application.builder().token(TOKEN).build()
@@ -786,10 +1030,23 @@ PREVIOUS_CONFIRM: [
         allow_reentry=True,
     )
 
-    app.add_handler(MessageHandler(filters.Regex(r"(?i)^.+\s+engel kaldır$"), kullanici_engel_kaldir))
-    app.add_handler(MessageHandler(filters.Regex(r"(?i)^.+\s+engelle$"), kullanici_engelle))
-    app.add_handler(MessageHandler(filters.Regex(r"(?i)^talep aç$"), talep_ac))
-    app.add_handler(MessageHandler(filters.Regex(r"(?i)^talep kapa$"), talep_kapa))
+    panel_conv = ConversationHandler(
+        entry_points=[CommandHandler("panel", panel_ac)],
+        states={
+            PANEL: [MessageHandler(filters.TEXT & ~filters.COMMAND, panel_secim)],
+            PANEL_START_DATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, panel_baslangic_tarihi)],
+            PANEL_START_TIME: [MessageHandler(filters.TEXT & ~filters.COMMAND, panel_baslangic_saati)],
+            PANEL_END_DATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, panel_bitis_tarihi)],
+            PANEL_END_TIME: [MessageHandler(filters.TEXT & ~filters.COMMAND, panel_bitis_saati)],
+            PANEL_PERIOD_CONFIRM: [MessageHandler(filters.TEXT & ~filters.COMMAND, panel_donem_onay)],
+            PANEL_BLOCK_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, panel_kullanici_engelle)],
+            PANEL_UNBLOCK_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, panel_engel_kaldir)],
+        },
+        fallbacks=[CommandHandler("panel", panel_ac)],
+        allow_reentry=True,
+    )
+
+    app.add_handler(panel_conv)
     app.add_handler(MessageHandler(filters.Regex(r"^⏳ KALAN SÜRE$"), kalan_sure))
     app.add_handler(conv)
 
