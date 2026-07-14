@@ -313,7 +313,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return NAME
 
 async def title_selected(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data["unvan"] = update.message.text.replace("⭐ ", "").replace("⭐⭐ ", "").replace("⭐⭐⭐ ", "").replace("⭐⭐⭐⭐ ", "").replace("🎯 ", "")
+    context.user_data["unvan"] = update.message.text.strip()
 
     keyboard = [
         ["🌅 05:00-14:00", "☀️ 08:00-17:00"],
