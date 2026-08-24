@@ -390,6 +390,33 @@ def gecerli_isim_mi(isim):
     if not any(ch.isalpha() for ch in ham):
         return False, "harfsiz"
 
+    # Anlamsız/rastgele harf dizileri kontrolü
+    # Sadece harflerden oluşan temiz metin oluştur (nokta, boşluk hariç)
+    sadece_harf = "".join(ch for ch in ham.lower() if ch.isalpha())
+    
+    if sadece_harf:
+        # Aynı harfin 3+ kez peş peşe gelmesi anlamsızdır
+        if re.search(r"(.)\1{2,}", sadece_harf):
+            return False, "tekrar"
+        
+        # Sesli harf oranı kontrolü (Türkçe/Latince kelimelerde %20-70 arası olmalı)
+        sesli_harfler = "aeıioöuüAEIİOÖUÜ"
+        sesli_sayisi = sum(1 for ch in ham if ch in sesli_harfler)
+        harf_sayisi = len(sadece_harf)
+        
+        if harf_sayisi > 0:
+            sesli_oran = sesli_sayisi / harf_sayisi
+            if sesli_oran < 0.15 or sesli_oran > 0.75:
+                return False, "sesli_oran"
+        
+        # Çok kısa kelimeler anlamsız olabilir (tek harf hariç geleneksel kısaltmalar)
+        for kelime in kelimeler:
+            temiz = "".join(ch for ch in kelime if ch.isalpha())
+            if 2 <= len(temiz) <= 3:
+                # 2-3 harflik kelimeler yalnızca sesli harf içeriyorsa şüpheli
+                if all(ch.lower() in "aeıioöuü" for ch in temiz):
+                    return False, "anlamsiz_kelime"
+
     return True, None
 
 def onceki_donem_bilgisi():
