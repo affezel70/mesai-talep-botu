@@ -547,14 +547,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return SHIFT
 
     await update.message.reply_text(
-        "🕒 MESAİ TALEP SİSTEMİ\n\n"
-        "🟢 Talep alımı devam ediyor.\n"
+        "🕒 MESAİ TALEP SİSTEMİ\\n\\n📢 Mesai Talep Bilgilendirmesi\\n\\nMesai talebinizi oluşturmadan önce aşağıdaki hususları dikkate almanızı rica ederiz:\\n\\n• 📅 Haftalık izin günlerinizi mümkün olduğunca özel günlerinize göre planlayınız.\\n• ⚠️ Acil ve zorunlu olmayan durumlar için mesai talebinde bulunmamaya özen gösteriniz.\\n• 📊 Mesai planlamaları, operasyonel ihtiyaçlar ve sistemin işleyişi doğrultusunda değerlendirilmektedir.\\n• ✅ Her mesai talebi değerlendirmeye alınmakta olup, talebin oluşturulması onaylanacağı anlamına gelmemektedir.\\n\\n🙏 Anlayışınız için teşekkür ederiz.\\n\\n🟢 Talep alımı devam ediyor.\\n\n"
         f"📁 Dönem: {aktif_donem_adi()}\n"
         f"📅 Son talep günü: {tarih_metni(son_talep_gunu())}\n"
-        f"{kalan_sure_metni()}\n\n"
-        "👤 Devam etmek için lütfen sistem adınızı yazınız:",
+                "👤 Devam etmek için lütfen sistem adınızı yazınız:",
         reply_markup=ReplyKeyboardMarkup(
-            [["⏳ KALAN SÜRE"]],
+            [],
             resize_keyboard=True,
             one_time_keyboard=False
         )
@@ -751,7 +749,7 @@ async def onceki_talep_onay(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "⚡ Önceki dönem tercihleriniz aktif döneme aynen aktarıldı.\n"
             "⏳ Talep süresi sona erene kadar mevcut talebinizi güncelleyebilirsiniz.",
             reply_markup=ReplyKeyboardMarkup(
-                [["⏳ KALAN SÜRE"]],
+                [],
                 resize_keyboard=True,
                 one_time_keyboard=False
             )
@@ -905,9 +903,9 @@ async def kalan_sure(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         f"{durum}\n\n"
         f"📅 Son talep günü: {tarih_metni(son_talep_gunu())}\n"
-        f"{kalan_sure_metni()}",
+        ""
         reply_markup=ReplyKeyboardMarkup(
-            [["⏳ KALAN SÜRE"]],
+            [],
             resize_keyboard=True,
             one_time_keyboard=False
         )
