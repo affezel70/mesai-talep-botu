@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 import gspread
 from google.oauth2.service_account import Credentials
-from telegram import Update, ReplyKeyboardMarkup, ReplyKeyboardRemove
+from telegram import Update, ReplyKeyboardMarkup, ReplyKeyboardRemove, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -250,34 +250,6 @@ def tarih_saat_metni(dt):
     return dt.strftime("%d.%m.%Y %H:%M")
 
 
-def kalan_sure_metni():
-    simdi = datetime.now(ZoneInfo("Europe/Istanbul"))
-    baslangic = aktif_baslangic_zamani()
-    bitis = aktif_bitis_zamani()
-
-    if baslangic and simdi < baslangic:
-        kalan = baslangic - simdi
-        on_ek = "⏳ Açılışa kalan süre:"
-    else:
-        kalan = bitis - simdi
-        on_ek = "⏳ Kapanışa kalan süre:"
-
-    if kalan.total_seconds() <= 0:
-        return "⏳ Süre doldu."
-
-    toplam_saniye = int(kalan.total_seconds())
-    gun, kalan_saniye = divmod(toplam_saniye, 86400)
-    saat, kalan_saniye = divmod(kalan_saniye, 3600)
-    dakika, saniye = divmod(kalan_saniye, 60)
-    if gun > 0:
-        return f"{on_ek} {gun} gün {saat} saat {dakika} dakika {saniye} saniye"
-    return f"{on_ek} {saat} saat {dakika} dakika {saniye} saniye"
-
-
-def sure_doldu_mu():
-    return datetime.now(ZoneInfo("Europe/Istanbul")) >= aktif_bitis_zamani()
-
-
 def talep_durumu_acik_mi():
     return ayar_degeri("talep_durumu", "kapalı").lower() == "açık"
 
@@ -287,6 +259,7 @@ def talep_durumunu_ayarla(durum):
 
 
 TOKEN = os.environ["BOT_TOKEN"]
+INFO_BILGI = 0
 NAME = 1
 TITLE = 2
 SHIFT = 3
@@ -498,6 +471,25 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return ConversationHandler.END
 
+    await update.message.reply_text(
+        "📢 Mesai Talep Bilgilendirmesi\n\n"
+        "Mesai talebinizi oluşturmadan önce aşağıdaki hususları dikkate almanızı rica ederiz.\n\n"
+        "📅 Haftalık izin günlerinizi mümkün olduğunca özel günlerinize göre planlayınız.\n\n"
+        "⚠️ Acil ve zorunlu olmayan durumlar için mesai talebinde bulunmamaya özen gösteriniz.\n\n"
+        "📊 Mesai planlamaları operasyonel ihtiyaçlar ve sistemin işleyişi doğrultusunda değerlendirilmektedir.\n\n"
+        "✅ Her mesai talebi değerlendirmeye alınır ancak her talep onaylanacağı anlamına gelmez.\n\n"
+        "Anlayışınız ve iş birliğiniz için teşekkür ederiz.",
+        reply_markup=InlineKeyboardMarkup(
+            [[InlineKeyboardButton("✅ Okudum, Devam Et", callback_data="bilgi_kabul")]]
+        )
+    )
+    return INFO_BILGI
+
+
+async def bilgi_onay_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
     telegram_id = update.effective_user.id
     _, kayitli = kayitli_kullanici_bul(telegram_id)
 
@@ -506,7 +498,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data["unvan"] = kayitli[2].strip()
 
         if engelli_mi(context.user_data["isim"]):
-            await update.message.reply_text("⛔ MESAİ TALEBİ YETKİNİZ BULUNMAMAKTADIR", reply_markup=ReplyKeyboardRemove())
+            await query.message.reply_text("⛔ MESAİ TALEBİ YETKİNİZ BULUNMAMAKTADIR", reply_markup=ReplyKeyboardRemove())
             return ConversationHandler.END
 
         row_number, row, grup = mevcut_talep_satiri(context.user_data["isim"])
@@ -514,7 +506,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             context.user_data["guncelleme_modu"] = True
             context.user_data["mevcut_satir"] = row_number
             context.user_data["mevcut_grup"] = grup
-            await update.message.reply_text(
+            await query.message.reply_text(
                 f"👋 Hoş geldiniz, {context.user_data['isim']}!\n\nℹ️ Bu dönem için zaten bir mesai talebiniz bulunmaktadır.",
                 reply_markup=ReplyKeyboardMarkup([["✏️ TALEBİMİ GÜNCELLE"]], resize_keyboard=True, one_time_keyboard=True)
             )
@@ -523,7 +515,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         onceki = onceki_talebi_bul(context.user_data["isim"])
         if onceki and len(onceki) >= 5:
             context.user_data["onceki_talep"] = onceki
-            await update.message.reply_text(
+            await query.message.reply_text(
                 f"👋 Hoş geldiniz, {context.user_data['isim']}!\n\n"
                 f"📋 ÖNCEKİ DÖNEM TALEBİNİZ\n👔 Ünvan: {onceki[1]}\n🕒 Mesai: {onceki[2]}\n"
                 f"📅 İzin Günü: {onceki[3]}\n📝 Özel Durum: {onceki[4]}\n\n"
@@ -536,7 +528,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return PREVIOUS_REQUEST
 
         context.user_data["guncelleme_modu"] = False
-        await update.message.reply_text(
+        await query.message.reply_text(
             f"👋 Hoş geldiniz, {context.user_data['isim']}!\n👔 Kayıtlı ünvanınız: {context.user_data['unvan']}\n\n"
             "🕒 Lütfen talep ettiğiniz çalışma saatini seçiniz.",
             reply_markup=ReplyKeyboardMarkup(
@@ -546,16 +538,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return SHIFT
 
-    await update.message.reply_text(
-        "🕒 MESAİ TALEP SİSTEMİ\\n\\n📢 Mesai Talep Bilgilendirmesi\\n\\nMesai talebinizi oluşturmadan önce aşağıdaki hususları dikkate almanızı rica ederiz:\\n\\n• 📅 Haftalık izin günlerinizi mümkün olduğunca özel günlerinize göre planlayınız.\\n• ⚠️ Acil ve zorunlu olmayan durumlar için mesai talebinde bulunmamaya özen gösteriniz.\\n• 📊 Mesai planlamaları, operasyonel ihtiyaçlar ve sistemin işleyişi doğrultusunda değerlendirilmektedir.\\n• ✅ Her mesai talebi değerlendirmeye alınmakta olup, talebin oluşturulması onaylanacağı anlamına gelmemektedir.\\n\\n🙏 Anlayışınız için teşekkür ederiz.\\n\\n🟢 Talep alımı devam ediyor.\\n\n"
+    await query.message.reply_text(
+        "🕒 MESAİ TALEP SİSTEMİ\n\n"
+        "🟢 Talep alımı devam ediyor.\n"
         f"📁 Dönem: {aktif_donem_adi()}\n"
-        f"📅 Son talep günü: {tarih_metni(son_talep_gunu())}\n"
-                "👤 Devam etmek için lütfen sistem adınızı yazınız:",
-        reply_markup=ReplyKeyboardMarkup(
-            [],
-            resize_keyboard=True,
-            one_time_keyboard=False
-        )
+        f"📅 Son talep günü: {tarih_metni(son_talep_gunu())}\n\n"
+        "👤 Devam etmek için lütfen sistem adınızı yazınız:",
+        reply_markup=ReplyKeyboardRemove()
     )
 
     return NAME
@@ -648,8 +637,7 @@ async def yeni_talep_baslat(update: Update, context: ContextTypes.DEFAULT_TYPE):
     title_keyboard = [
         ["⭐ Operatör", "⭐⭐ Kıdemli Operatör"],
         ["⭐⭐⭐ Danışman", "⭐⭐⭐⭐ Kıdemli Danışman"],
-        ["🎯 RMT"],
-        ["⏳ KALAN SÜRE"]
+        ["🎯 RMT"]
     ]
     await update.message.reply_text(
         f"👋 Hoş geldiniz, {context.user_data['isim']}!\n\n"
@@ -748,11 +736,7 @@ async def onceki_talep_onay(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "✅ MESAİ TALEBİNİZ BAŞARIYLA OLUŞTURULDU\n\n"
             "⚡ Önceki dönem tercihleriniz aktif döneme aynen aktarıldı.\n"
             "⏳ Talep süresi sona erene kadar mevcut talebinizi güncelleyebilirsiniz.",
-            reply_markup=ReplyKeyboardMarkup(
-                [],
-                resize_keyboard=True,
-                one_time_keyboard=False
-            )
+            reply_markup=ReplyKeyboardRemove()
         )
     except Exception as e:
         await update.message.reply_text(
@@ -888,29 +872,6 @@ async def confirm_selected(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
     return ConversationHandler.END
-
-
-async def kalan_sure(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if sure_doldu_mu():
-        talep_durumunu_ayarla("kapalı")
-        await update.message.reply_text(
-            "🔒 MESAİ TALEP ALIMI SONA ERMİŞTİR\n\n"
-            f"📅 Son talep günü: {tarih_metni(son_talep_gunu())}"
-        )
-        return
-
-    durum = "🟢 Talep alımı devam ediyor." if talep_durumu_acik_mi() else "🔒 Talep alımı şu anda kapalı."
-    await update.message.reply_text(
-        f"{durum}\n\n"
-        f"📅 Son talep günü: {tarih_metni(son_talep_gunu())}\n"
-        ""
-        reply_markup=ReplyKeyboardMarkup(
-            [],
-            resize_keyboard=True,
-            one_time_keyboard=False
-        )
-    )
-
 
 
 def yonetici_mi(update: Update):
@@ -1238,6 +1199,9 @@ def main():
     conv = ConversationHandler(
         entry_points=[CommandHandler("start", start)],
         states={
+    INFO_BILGI: [
+        CallbackQueryHandler(bilgi_onay_callback, pattern="^bilgi_kabul$")
+    ],
     TITLE: [
         MessageHandler(filters.TEXT & ~filters.COMMAND, title_selected)
     ],
@@ -1291,7 +1255,6 @@ PREVIOUS_CONFIRM: [
     )
 
     app.add_handler(panel_conv)
-    app.add_handler(MessageHandler(filters.Regex(r"^⏳ KALAN SÜRE$"), kalan_sure))
     app.add_handler(conv)
 
     print("Bot çalışıyor...")
