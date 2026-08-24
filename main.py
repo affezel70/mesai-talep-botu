@@ -284,6 +284,8 @@ PANEL_OPEN_NOTIFY_CONFIRM = 29
 PANEL_CLOSE_NOTIFY_CONFIRM = 30
 PANEL_REMIND_CONFIRM = 31
 PANEL_REMIND_LIST_CONFIRM = 32
+PANEL_CUSTOM_ANNOUNCE_TEXT = 33
+PANEL_CUSTOM_ANNOUNCE_CONFIRM = 34
 
 _CACHE = {}
 CACHE_TTL = 8  # saniye
@@ -994,6 +996,7 @@ def panel_klavyesi():
     return ReplyKeyboardMarkup([
         ["🟢 AÇ", "🔴 KAPAT", "📊 DURUM"],
         ["📣 DUYURU", "📋 EKSİKLER"],
+        ["📢 ÖZEL DUYURU"],
         ["🚫 ENGELLE", "✅ ENGEL KALDIR"],
         ["❌ PANELİ KAPAT"]
     ], resize_keyboard=True, one_time_keyboard=False)
@@ -1059,6 +1062,17 @@ async def panel_secim(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=ReplyKeyboardMarkup([["✅ DUYURUYU GÖNDER"], ["❌ İPTAL"]], resize_keyboard=True, one_time_keyboard=True)
         )
         return PANEL_ANNOUNCE_CONFIRM
+
+    if secim in {"📢 ÖZEL DUYURU", "📢 ÖZEL DUYURU GÖNDER"}:
+        context.user_data.pop("ozel_duyuru_metni", None)
+        await update.message.reply_text(
+            "📢 ÖZEL DUYURU\n\n"
+            "Tüm kayıtlı kullanıcılara göndermek istediğiniz duyuru metnini yazınız.\n\n"
+            "Yazdığınız mesaj aynen tüm kullanıcılara iletilecektir.\n\n"
+            "İptal etmek için: ❌ İPTAL",
+            reply_markup=ReplyKeyboardMarkup([["❌ İPTAL"]], resize_keyboard=True, one_time_keyboard=True)
+        )
+        return PANEL_CUSTOM_ANNOUNCE_TEXT
 
     if secim in {"📋 EKSİKLER", "📋 TALEP VERMEYENLER"}:
         eksikler = talep_vermeyen_kullanicilar()
@@ -1263,6 +1277,77 @@ async def panel_duyuru_onay(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return PANEL
 
 
+async def panel_ozel_duyuru_metni(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    metin = update.message.text
+
+    if metin and metin.strip() == "❌ İPTAL":
+        context.user_data.pop("ozel_duyuru_metni", None)
+        await update.message.reply_text("📢 Özel duyuru iptal edildi.", reply_markup=panel_klavyesi())
+        return PANEL
+
+    if not metin or not metin.strip():
+        await update.message.reply_text(
+            "❌ Boş bir duyuru gönderilemez. Lütfen duyuru metnini yazınız.",
+            reply_markup=ReplyKeyboardMarkup([["❌ İPTAL"]], resize_keyboard=True, one_time_keyboard=True)
+        )
+        return PANEL_CUSTOM_ANNOUNCE_TEXT
+
+    context.user_data["ozel_duyuru_metni"] = metin
+    await update.message.reply_text(
+        "📢 ÖZEL DUYURU ÖNİZLEME\n"
+        "━━━━━━━━━━━━━━━━━━\n\n"
+        f"{metin}\n\n"
+        "━━━━━━━━━━━━━━━━━━\n"
+        "Bu duyuru tüm kayıtlı kullanıcılara gönderilecek.\n\nGönderilsin mi?",
+        reply_markup=ReplyKeyboardMarkup([["✅ DUYURUYU GÖNDER"], ["❌ İPTAL"]], resize_keyboard=True, one_time_keyboard=True)
+    )
+    return PANEL_CUSTOM_ANNOUNCE_CONFIRM
+
+
+async def panel_ozel_duyuru_onay(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    secim = update.message.text.strip() if update.message.text else ""
+
+    if secim == "❌ İPTAL":
+        context.user_data.pop("ozel_duyuru_metni", None)
+        await update.message.reply_text("📢 Özel duyuru iptal edildi.", reply_markup=panel_klavyesi())
+        return PANEL
+
+    if secim != "✅ DUYURUYU GÖNDER":
+        await update.message.reply_text("Lütfen onay butonlarından birini kullanınız.")
+        return PANEL_CUSTOM_ANNOUNCE_CONFIRM
+
+    mesaj = context.user_data.get("ozel_duyuru_metni")
+    if not mesaj or not mesaj.strip():
+        await update.message.reply_text("❌ Gönderilecek duyuru metni bulunamadı.", reply_markup=panel_klavyesi())
+        return PANEL
+
+    basarili = basarisiz = 0
+    gorulen = set()
+    for row in kullanicilar_verisi()[1:]:
+        if not row:
+            continue
+        tid = str(row[0]).strip()
+        if not tid or tid in gorulen:
+            continue
+        gorulen.add(tid)
+        try:
+            await context.bot.send_message(chat_id=int(tid), text=mesaj)
+            basarili += 1
+        except Exception as e:
+            basarisiz += 1
+            print(f"Özel duyuru gönderilemedi ({tid}): {e}")
+
+    simdi = datetime.now(ZoneInfo("Europe/Istanbul")).strftime("%d.%m.%Y %H:%M")
+    ayar_yaz("son_duyuru_zamani", simdi)
+    ayar_yaz("son_duyuruyu_gonderen", yonetici_bilgisi(update))
+    context.user_data.pop("ozel_duyuru_metni", None)
+    await update.message.reply_text(
+        f"📢 ÖZEL DUYURU GÖNDERİMİ TAMAMLANDI\n\n✅ Başarılı: {basarili}\n⚠️ Ulaşılamayan: {basarisiz}",
+        reply_markup=panel_klavyesi()
+    )
+    return PANEL
+
+
 async def panel_kullanici_engelle(update: Update, context: ContextTypes.DEFAULT_TYPE):
     isim = update.message.text.strip()
     if not isim:
@@ -1352,6 +1437,8 @@ PREVIOUS_CONFIRM: [
             PANEL_CLOSE_NOTIFY_CONFIRM: [MessageHandler(filters.TEXT & ~filters.COMMAND, panel_kapanis_bildirim_onay)],
             PANEL_REMIND_CONFIRM: [MessageHandler(filters.TEXT & ~filters.COMMAND, panel_hatirlatma_onay)],
             PANEL_REMIND_LIST_CONFIRM: [MessageHandler(filters.TEXT & ~filters.COMMAND, panel_liste_hatirlatma_onay)],
+            PANEL_CUSTOM_ANNOUNCE_TEXT: [MessageHandler(filters.TEXT & ~filters.COMMAND, panel_ozel_duyuru_metni)],
+            PANEL_CUSTOM_ANNOUNCE_CONFIRM: [MessageHandler(filters.TEXT & ~filters.COMMAND, panel_ozel_duyuru_onay)],
         },
         fallbacks=[CommandHandler("panel", panel_ac)],
         allow_reentry=True,
