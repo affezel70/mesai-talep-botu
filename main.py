@@ -1,6 +1,7 @@
 import asyncio
 import os
 import json
+import re
 import time
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
@@ -330,6 +331,67 @@ def engelli_isimleri():
 def normalize_name(value):
     return " ".join(str(value).strip().casefold().split())
 
+
+def tr_ascii_fold(value):
+    """Türkçe karakterleri ASCII karşılıklarına indirger ve küçük harfe çevirir."""
+    metin = str(value).strip()
+    ceviri = str.maketrans({
+        "ç": "c", "Ç": "c", "ğ": "g", "Ğ": "g", "ı": "i", "İ": "i",
+        "ö": "o", "Ö": "o", "ş": "s", "Ş": "s", "ü": "u", "Ü": "u",
+    })
+    return metin.translate(ceviri).casefold()
+
+
+# Ad alanına ad yerine talep/mesai cümlesi yazılmasını engellemek için kullanılan ifadeler.
+GECERSIZ_ISIM_KELIMELERI = {
+    "mesai", "mesaisi", "rica", "ederim", "edecegim", "istiyorum", "istirica",
+    "talep", "izin", "gunu", "gunum", "musait", "musade", "olur", "olursa",
+    "lutfen", "tesekkur", "tesekkurler", "cumartesi", "pazartesi", "sali",
+    "carsamba", "persembe", "cuma", "pazar", "sabah", "aksam", "gece",
+    "vardiya", "saat", "dogum", "tedavi", "nedeni", "nedeniyle", "ozel", "durum",
+}
+
+
+def gecerli_isim_mi(isim):
+    """Girilen metnin gerçekten bir sistem adı olup olmadığını kontrol eder.
+
+    Ad yerine mesai saati, tarih veya talep cümlesi yazan kullanıcıları ayıklar.
+    Geçerliyse (True, None), geçersizse (False, "sebep") döndürür.
+    """
+    ham = str(isim).strip()
+
+    if not ham:
+        return False, "Ad boş olamaz."
+
+    # Saat / mesai aralığı içeriyorsa (ör. 11:00-20:00) ad değildir.
+    if re.search(r"\d{1,2}[:.]\d{2}", ham):
+        return False, "saat"
+
+    # Herhangi bir rakam içeriyorsa ad değildir.
+    if any(ch.isdigit() for ch in ham):
+        return False, "rakam"
+
+    kelimeler = ham.split()
+
+    # Ad genelde 1-3 kelimedir; cümle yazılmışsa reddet.
+    if len(kelimeler) > 4:
+        return False, "cumle"
+
+    # Aşırı uzun girişler ad değildir.
+    if len(ham) > 40:
+        return False, "uzun"
+
+    # Talep/mesai ile ilgili anahtar kelimeler geçiyorsa ad değildir.
+    hedef_kelimeler = {tr_ascii_fold(k) for k in kelimeler}
+    if hedef_kelimeler & GECERSIZ_ISIM_KELIMELERI:
+        return False, "kelime"
+
+    # En az bir harf içermelidir.
+    if not any(ch.isalpha() for ch in ham):
+        return False, "harfsiz"
+
+    return True, None
+
 def onceki_donem_bilgisi():
     yil, ay = aktif_talep_ayi()
     if ay == 1:
@@ -570,7 +632,21 @@ async def title_selected(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return SHIFT
 
 async def get_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data["isim"] = update.message.text.strip()
+    girilen = update.message.text.strip()
+
+    gecerli, _ = gecerli_isim_mi(girilen)
+    if not gecerli:
+        await update.message.reply_text(
+            "⚠️ GEÇERSİZ SİSTEM ADI\n\n"
+            "Lütfen bu alana yalnızca SİSTEM ADINIZI yazınız.\n"
+            "Mesai saati, izin günü, tarih veya talep açıklaması yazmayınız.\n\n"
+            "❌ Hatalı örnek: 11:00-20:00 mesaisi rica ederim\n"
+            "✅ Doğru örnek: RMT.Özge\n\n"
+            "👤 Lütfen sistem adınızı yeniden yazınız:"
+        )
+        return NAME
+
+    context.user_data["isim"] = girilen
 
     if engelli_mi(context.user_data["isim"]):
         await update.message.reply_text(
