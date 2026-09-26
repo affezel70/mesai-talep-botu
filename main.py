@@ -3,6 +3,14 @@ import os
 import json
 import re
 import time
+import logging
+import traceback
+
+logging.basicConfig(
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    level=logging.INFO,
+)
+logger = logging.getLogger(__name__)
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 import gspread
@@ -1380,12 +1388,35 @@ async def panel_engel_kaldir(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 
 
+async def hata_yakalayici(update, context):
+    """Herhangi bir handler'da oluşan hatayı loglar ve kullanıcıya bilgi verir."""
+    logger.error("Handler hatası: %s", context.error)
+    logger.error("".join(traceback.format_exception(type(context.error), context.error, context.error.__traceback__)))
+    try:
+        if isinstance(update, Update):
+            if update.callback_query:
+                await update.callback_query.answer()
+                await update.callback_query.message.reply_text(
+                    "⚠️ Beklenmeyen bir hata oluştu. Lütfen /start yazarak yeniden deneyiniz."
+                )
+            elif update.message:
+                await update.message.reply_text(
+                    "⚠️ Beklenmeyen bir hata oluştu. Lütfen /start yazarak yeniden deneyiniz."
+                )
+    except Exception as e:
+        logger.error("Hata mesajı gönderilemedi: %s", e)
+
+
 def main():
 
     app = Application.builder().token(TOKEN).build()
 
     conv = ConversationHandler(
-        entry_points=[CommandHandler("start", start)],
+        entry_points=[
+            CommandHandler("start", start),
+            CallbackQueryHandler(bilgi_onay_callback, pattern="^bilgi_kabul$"),
+        ],
+        per_message=False,
         states={
     INFO_BILGI: [
         CallbackQueryHandler(bilgi_onay_callback, pattern="^bilgi_kabul$")
@@ -1444,8 +1475,9 @@ PREVIOUS_CONFIRM: [
         allow_reentry=True,
     )
 
-    app.add_handler(panel_conv)
     app.add_handler(conv)
+    app.add_handler(panel_conv)
+    app.add_error_handler(hata_yakalayici)
 
     print("Bot çalışıyor...")
     app.run_polling(drop_pending_updates=True)
