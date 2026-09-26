@@ -582,7 +582,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [[InlineKeyboardButton("✅ Okudum, Devam Et", callback_data="bilgi_kabul")]]
         )
     )
-    return INFO_BILGI
+    return ConversationHandler.END
 
 
 async def bilgi_onay_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
