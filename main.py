@@ -1502,7 +1502,7 @@ PREVIOUS_CONFIRM: [
     app.add_error_handler(hata_yakalayici)
 
     print("Bot çalışıyor...")
-    app.run_polling(drop_pending_updates=True)
+    app.run_polling(drop_pending_updates=True, allowed_updates=Update.ALL_TYPES)
 
 if __name__ == "__main__":
     asyncio.set_event_loop(asyncio.new_event_loop())
