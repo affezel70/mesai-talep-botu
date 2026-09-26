@@ -23,6 +23,7 @@ from telegram.ext import (
     CallbackQueryHandler,
     ConversationHandler,
     ContextTypes,
+    TypeHandler,
     filters,
 )
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
@@ -586,6 +587,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def bilgi_onay_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    logger.info("✅ bilgi_onay_callback ÇALIŞTI - data=%s user=%s",
+                update.callback_query.data if update.callback_query else None,
+                update.effective_user.id if update.effective_user else None)
     query = update.callback_query
     await query.answer()
 
@@ -1407,6 +1411,23 @@ async def hata_yakalayici(update, context):
         logger.error("Hata mesajı gönderilemedi: %s", e)
 
 
+async def _tum_updateleri_logla(update, context):
+    """Teşhis: Telegram'dan gelen HER güncellemeyi loglar."""
+    try:
+        if getattr(update, "callback_query", None):
+            logger.info("📥 UPDATE callback_query GELDI: data=%s user=%s",
+                        update.callback_query.data,
+                        update.effective_user.id if update.effective_user else None)
+        elif getattr(update, "message", None):
+            logger.info("📥 UPDATE message GELDI: text=%r user=%s",
+                        update.message.text,
+                        update.effective_user.id if update.effective_user else None)
+        else:
+            logger.info("📥 UPDATE diğer tür GELDI: %s", type(update).__name__)
+    except Exception as e:
+        logger.error("update log hatası: %s", e)
+
+
 def main():
 
     app = Application.builder().token(TOKEN).build()
@@ -1475,6 +1496,7 @@ PREVIOUS_CONFIRM: [
         allow_reentry=True,
     )
 
+    app.add_handler(TypeHandler(Update, _tum_updateleri_logla), group=-1)
     app.add_handler(conv)
     app.add_handler(panel_conv)
     app.add_error_handler(hata_yakalayici)
