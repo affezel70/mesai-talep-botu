@@ -146,9 +146,9 @@ def aktif_talep_sheet():
         ws = spreadsheet.worksheet(baslik)
     except gspread.WorksheetNotFound:
         ws = spreadsheet.add_worksheet(title=baslik, rows=1005, cols=11)
-        ws.update("A4:K5", [
-            ["CANLI DESTEK EKİBİ", "", "", "", "", "", "KIDEMLİ PERSONEL", "", "", "", ""],
-            ["Personel", "Ünvan", "Mesai", "İzin Günü", "Özel Durum", "", "Personel", "Ünvan", "Mesai", "İzin Günü", "Özel Durum"],
+        ws.update("A4:E5", [
+            ["MARIOBET MESAİ TALEPLERİ", "", "", "", ""],
+            ["Personel", "Ünvan", "Mesai", "İzin Günü", "Özel Durum"],
         ])
     return ws
 
@@ -156,6 +156,19 @@ def aktif_talep_sheet():
 VERI_BASLANGIC_SATIRI = 6
 CANLI_DESTEK_UNVANLARI = {"⭐ Operatör", "🎯 RMT"}
 KIDEMLI_UNVANLARI = {"⭐⭐ Kıdemli Operatör", "⭐⭐⭐ Danışman", "⭐⭐⭐⭐ Kıdemli Danışman"}
+
+# Liste sıralamasında kullanılan kıdem önceliği (küçük sayı = üstte).
+UNVAN_SIRA = {
+    "⭐⭐⭐⭐ Kıdemli Danışman": 0,
+    "⭐⭐⭐ Danışman": 1,
+    "⭐⭐ Kıdemli Operatör": 2,
+    "⭐ Operatör": 3,
+    "🎯 RMT": 4,
+}
+
+
+def unvan_sira_anahtari(unvan):
+    return UNVAN_SIRA.get(str(unvan).strip(), 99)
 
 
 def unvan_grubu(unvan):
@@ -910,14 +923,24 @@ async def special_selected(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return await show_confirm(update, context)
 
     await update.message.reply_text(
-        "✍️ ÖZEL DURUM AÇIKLAMASI\n\nLütfen özel durumunuzu kısa ve açık şekilde yazınız:",
+        "✍️ ÖZEL DURUM AÇIKLAMASI\n\n"
+        "⚠️ En fazla 180 karakter yazabilirsiniz.\n\n"
+        "Lütfen özel durumunuzu kısa ve açık şekilde yazınız:",
         reply_markup=ReplyKeyboardRemove()
     )
     return SPECIAL_TEXT
 
 
 async def special_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data["ozel_durum"] = update.message.text
+    metin = update.message.text.strip()
+    if len(metin) > 180:
+        await update.message.reply_text(
+            "⚠️ ÖZEL DURUM ÇOK UZUN\n\n"
+            f"En fazla 180 karakter yazabilirsiniz. Şu an {len(metin)} karakter yazdınız.\n\n"
+            "Lütfen kısaltarak yeniden yazınız:"
+        )
+        return SPECIAL_TEXT
+    context.user_data["ozel_durum"] = metin
     return await show_confirm(update, context)
 
 
@@ -991,6 +1014,40 @@ async def confirm_selected(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return ConversationHandler.END
 
 
+def listeyi_sirala():
+    """Aktif dönem sayfasındaki tüm talepleri kıdeme göre tek listede (A:E) sıralar.
+
+    İki tablo (A:E ve G:K) birleştirilir, kıdeme göre sıralanır ve
+    A sütunundan başlayarak tek liste halinde yazılır. G:K tablosu temizlenir.
+    Sıralama: Kıdemli Danışman -> Danışman -> Kıdemli Operatör -> Operatör -> RMT
+    """
+    ws = aktif_talep_sheet()
+    kayitlar = tablo_kayitlarini_oku(ws)
+    talepler = [(k["veri"][:5] + [""] * 5)[:5] for k in kayitlar]
+    # Kıdeme göre stabil sıralama (aynı ünvan içinde mevcut sıra korunur).
+    talepler.sort(key=lambda v: unvan_sira_anahtari(v[1]))
+
+    son_satir = max(ws.row_count, VERI_BASLANGIC_SATIRI + len(talepler) + 1)
+    # Eski değerleri temizle (hem A:E hem G:K).
+    ws.batch_clear([f"A{VERI_BASLANGIC_SATIRI}:K{son_satir}"])
+    # Eski mesai renklerini sıfırla (C = canlı mesai sütunu, G:K = kıdemli tablo).
+    beyaz = {"backgroundColor": {"red": 1, "green": 1, "blue": 1}}
+    ws.format(f"C{VERI_BASLANGIC_SATIRI}:C{son_satir}", beyaz)
+    ws.format(f"G{VERI_BASLANGIC_SATIRI}:K{son_satir}", beyaz)
+
+    if talepler:
+        ws.update(
+            f"A{VERI_BASLANGIC_SATIRI}:E{VERI_BASLANGIC_SATIRI + len(talepler) - 1}",
+            talepler,
+        )
+        for idx, veri in enumerate(talepler):
+            satir = VERI_BASLANGIC_SATIRI + idx
+            mesai_hucresini_renklendir(ws, "canli", satir, veri[2])
+
+    cache_clear(f"talep_kayitlari:{ws.title}")
+    return len(talepler)
+
+
 def yonetici_mi(update: Update):
     raw = os.environ.get("ADMIN_IDS", "").strip()
     izinli = {x.strip() for x in raw.split(",") if x.strip()}
@@ -1009,6 +1066,7 @@ def panel_klavyesi():
         ["🟢 AÇ", "🔴 KAPAT", "📊 DURUM"],
         ["📣 DUYURU", "📋 EKSİKLER"],
         ["📢 ÖZEL DUYURU"],
+        ["🔃 LİSTEYİ SIRALA"],
         ["🚫 ENGELLE", "✅ ENGEL KALDIR"],
         ["❌ PANELİ KAPAT"]
     ], resize_keyboard=True, one_time_keyboard=False)
@@ -1111,6 +1169,29 @@ async def panel_secim(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=ReplyKeyboardMarkup([["✅ HATIRLATMAYI GÖNDER"], ["❌ İPTAL"]], resize_keyboard=True, one_time_keyboard=True)
         )
         return PANEL_REMIND_CONFIRM
+
+    if secim in {"🔃 LİSTEYİ SIRALA", "🔃 SIRALA"}:
+        await update.message.reply_text("🔃 Liste kıdeme göre sıralanıyor, lütfen bekleyiniz...")
+        try:
+            adet = listeyi_sirala()
+            if adet == 0:
+                await update.message.reply_text(
+                    "ℹ️ Aktif dönemde sıralanacak talep bulunamadı.",
+                    reply_markup=panel_klavyesi()
+                )
+            else:
+                await update.message.reply_text(
+                    f"✅ Liste kıdeme göre sıralandı.\n\n"
+                    f"📋 Toplam {adet} talep tek listede düzenlendi.\n\n"
+                    "Sıralama: Kıdemli Danışman → Danışman → Kıdemli Operatör → Operatör → RMT",
+                    reply_markup=panel_klavyesi()
+                )
+        except Exception as e:
+            await update.message.reply_text(
+                f"❌ Sıralama sırasında hata oluştu.\n\n{e}",
+                reply_markup=panel_klavyesi()
+            )
+        return PANEL
 
     if secim in {"🚫 ENGELLE", "🚫 KULLANICI ENGELLE"}:
         await update.message.reply_text("🚫 Engellemek istediğiniz kullanıcının sistem adını yazınız:", reply_markup=ReplyKeyboardRemove())
